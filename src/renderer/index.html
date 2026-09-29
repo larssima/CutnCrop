@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' media: data:; media-src media:; connect-src media:">
+  <title>CutnCrop</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">Cut<span>n</span>Crop</div>
+    <div class="toolbar-group">
+      <button data-command="new" title="New project (Ctrl+N)">New</button>
+      <button data-command="open" title="Open project (Ctrl+O)">Open</button>
+      <button data-command="save" title="Save project (Ctrl+S)">Save</button>
+    </div>
+    <div class="toolbar-group">
+      <button data-command="undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+      <button data-command="redo" title="Redo (Ctrl+Y)">↷ Redo</button>
+    </div>
+    <div class="toolbar-spacer"></div>
+    <button data-command="import" title="Import media (Ctrl+I)">＋ Import</button>
+    <button class="primary" data-command="export" title="Export video (Ctrl+E)">Export</button>
+  </header>
+
+  <main class="workspace">
+    <section id="media-bin" class="panel">
+      <div class="panel-title">Media</div>
+      <div class="media-list"></div>
+    </section>
+
+    <section id="preview" class="panel">
+      <div class="preview-area">
+        <div class="preview-frame">
+          <video preload="auto" playsinline></video>
+          <div class="text-overlay"></div>
+          <div class="preview-message" hidden></div>
+        </div>
+      </div>
+      <div class="transport">
+        <span id="timecode" class="timecode">00:00:00:00</span>
+        <div class="transport-buttons">
+          <button data-command="start" title="Go to start (Home)">⏮</button>
+          <button data-command="prevFrame" title="Previous frame (←)">◀︎|</button>
+          <button id="play-button" class="play" data-command="play" title="Play (Space)">▶</button>
+          <button data-command="nextFrame" title="Next frame (→)">|▶︎</button>
+          <button data-command="end" title="Go to end (End)">⏭</button>
+        </div>
+        <span id="duration" class="timecode dim">00:00:00:00</span>
+      </div>
+    </section>
+
+    <section id="inspector" class="panel">
+      <div class="panel-title inspector-title">Project</div>
+      <div class="inspector-body"></div>
+    </section>
+  </main>
+
+  <section id="timeline" class="panel">
+    <div class="timeline-toolbar">
+      <button data-command="split" title="Split at playhead (S)">✂ Split</button>
+      <button data-command="delete" title="Delete (Del) — Shift+Del closes the gap">🗑 Delete</button>
+      <button data-command="addText" title="Add text at playhead (T)">T Add text</button>
+      <button data-command="closeGaps" title="Remove all gaps between video clips">⇤ Close gaps</button>
+      <button data-command="unlink" title="Unlink the selected clip from its video/audio partner so each can be edited alone (D)">⛓ Unlink</button>
+      <button data-command="toggleMute" title="Mute / unmute the selected clip's audio (M)">🔇 Mute</button>
+      <div class="toolbar-spacer"></div>
+      <button data-command="zoomOut" title="Zoom out (-)">−</button>
+      <input id="zoom-slider" type="range" min="1" max="9" step="0.05" title="Zoom (Ctrl+wheel)">
+      <button data-command="zoomIn" title="Zoom in (+)">+</button>
+      <button data-command="zoomFit" title="Fit timeline (\)">Fit</button>
+    </div>
+    <div class="timeline-body">
+      <div class="track-headers">
+        <div class="ruler-spacer"></div>
+        <div class="track-rows"></div>
+      </div>
+      <div class="timeline-scroll">
+        <div class="timeline-content">
+          <div class="ruler"></div>
+          <div class="lanes"></div>
+          <div class="playhead"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <dialog id="export-dialog">
+    <h2>Export video</h2>
+    <p class="export-summary"></p>
+    <label class="field">
+      <span class="field-label">Quality</span>
+      <select name="quality">
+        <option value="high">High (slow encode, larger file)</option>
+        <option value="standard" selected>Standard</option>
+        <option value="fast">Fast</option>
+        <option value="draft">Draft (quick preview)</option>
+      </select>
+    </label>
+    <div class="progress"><div class="progress-bar"></div></div>
+    <p class="export-status"></p>
+    <div class="button-row end">
+      <button class="export-show" hidden>Show in folder</button>
+      <button class="export-cancel">Close</button>
+      <button class="primary export-start">Choose file &amp; export…</button>
+    </div>
+  </dialog>
+
+  <div id="toast"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

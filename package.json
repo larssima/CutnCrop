@@ -1,0 +1,43 @@
+{
+  "name": "cutncrop",
+  "productName": "CutnCrop",
+  "version": "0.1.0",
+  "description": "Desktop video editor for Windows",
+  "type": "module",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "node scripts/start.js",
+    "drive-ui": "node scripts/drive-ui.mjs",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test:unit": "node --test \"test/unit/*.test.js\"",
+    "test-media": "node scripts/make-test-media.js",
+    "vendor-ffmpeg": "node scripts/vendor-ffmpeg.js",
+    "dist": "npm run vendor-ffmpeg && electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "playwright-core": "^1.63.0"
+  },
+  "build": {
+    "appId": "com.cutncrop.app",
+    "productName": "CutnCrop",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/ffmpeg",
+        "to": "ffmpeg"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
