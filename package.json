@@ -3,6 +3,8 @@
   "productName": "CutnCrop",
   "version": "0.1.0",
   "description": "Desktop video editor for Windows",
+  "license": "GPL-3.0-or-later",
+  "repository": "github:larssima/CutnCrop",
   "type": "module",
   "main": "src/main/main.js",
   "scripts": {

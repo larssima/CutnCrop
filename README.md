@@ -75,3 +75,14 @@ linked, unlinked and moved audio against the flashes, the mix level, fades and m
 | + / − / \ | Zoom in / out / fit (Ctrl+wheel zooms at the cursor) |
 | Ctrl+I / Ctrl+E | Import / export |
 | Ctrl+N / O / S | New / open / save project |
+
+## License
+
+CutnCrop is free software under the [GNU General Public License v3.0](LICENSE) or later:
+you may use, share and modify it, and any distributed modified version must also be
+released under the GPL with its source code.
+
+The installer bundles [FFmpeg](https://ffmpeg.org), which is licensed separately (the
+"full" builds are GPL). When distributing an installer, include FFmpeg's license and say
+where its source code can be obtained (for gyan.dev builds, the build page links the
+exact sources).
