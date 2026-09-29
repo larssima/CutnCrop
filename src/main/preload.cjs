@@ -8,6 +8,7 @@ function listen(channel, cb) {
 }
 
 contextBridge.exposeInMainWorld('api', {
+  version: ipcRenderer.sendSync('app:version'),
   pickMedia: () => ipcRenderer.invoke('media:pick'),
   probe: (paths) => ipcRenderer.invoke('media:probe', paths),
   prepareMedia: (media) => ipcRenderer.invoke('media:prepare', media),

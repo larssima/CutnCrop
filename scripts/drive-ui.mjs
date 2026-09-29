@@ -21,7 +21,16 @@ fs.rmSync(exportPath, { force: true });
 const problems = [];
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE; // set by VS Code terminals; makes Electron act as Node
-const app = await electron.launch({ args: [root], cwd: root, env });
+// CUTNCROP_EXE=path/to/CutnCrop.exe drives a packaged build instead of the source tree.
+// ffmpeg is then removed from PATH, so the run proves the bundled copy is used.
+const packaged = process.env.CUTNCROP_EXE;
+if (packaged) {
+  const pathKey = Object.keys(env).find((k) => k.toLowerCase() === 'path'); // "Path" on Windows
+  env[pathKey] = env[pathKey].split(';').filter((d) => !/ffmpeg/i.test(d)).join(';');
+  delete env.CUTNCROP_FFMPEG_DIR;
+  console.log('driving packaged build', packaged);
+}
+const app = await electron.launch(packaged ? { executablePath: packaged, args: [], env } : { args: [root], cwd: root, env });
 const page = await app.firstWindow();
 page.on('console', (m) => ['error', 'warning'].includes(m.type()) && problems.push(`console.${m.type()}: ${m.text()}`));
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
@@ -39,6 +48,7 @@ const stubDialogs = (open, save) =>
   }, { open, save });
 
 await ss('01-empty');
+console.log('app:', await app.evaluate(({ app: electronApp }) => ({ version: electronApp.getVersion(), packaged: electronApp.isPackaged })));
 
 // Import
 const importFiles = ['cfr25_720p.mp4', 'vertical_360x640.mp4', 'webm_vp9_640.webm', 'noaudio_640.mp4', 'tone.mp3', 'beeps.wav'];
@@ -91,8 +101,12 @@ await page.click('.lane[data-track-id=a1] .clip:nth-child(1)', { position: { x: 
 await page.keyboard.press('Delete');
 console.log('video clips before/after deleting a sound clip:', videoClipsBefore, await page.locator('.lane.video .clip').count());
 await page.click('[data-command=zoomFit]');
-await page.dragAndDrop('.media-card:nth-child(5)', '.lane[data-track-id=a1]', { targetPosition: { x: 3, y: 25 } }); // tone.mp3 at 0
+// tone.mp3 at 0. Playwright's synthetic HTML5 drag occasionally doesn't register; retry once.
 const tone = page.locator('.clip.audio', { hasText: 'tone.mp3' });
+for (let attempt = 1; attempt <= 2 && !(await tone.count()); attempt++) {
+  await page.dragAndDrop('.media-card:nth-child(5)', '.lane[data-track-id=a1]', { targetPosition: { x: 3, y: 25 } });
+  await tone.first().waitFor({ timeout: 3000 }).catch(() => console.log(`drag attempt ${attempt} did not land`));
+}
 await tone.hover();
 const fadeBox = await tone.locator('.fade-handle[data-fade=in]').boundingBox();
 const zoomNow = await page.evaluate(() => window.cutncrop.store.zoom);

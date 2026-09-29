@@ -5,6 +5,7 @@
   "description": "Desktop video editor for Windows",
   "license": "GPL-3.0-or-later",
   "repository": "github:larssima/CutnCrop",
+  "author": "Lars Sima",
   "type": "module",
   "main": "src/main/main.js",
   "scripts": {
@@ -14,7 +15,10 @@
     "test:unit": "node --test \"test/unit/*.test.js\"",
     "test-media": "node scripts/make-test-media.js",
     "vendor-ffmpeg": "node scripts/vendor-ffmpeg.js",
-    "dist": "npm run vendor-ffmpeg && electron-builder --win"
+    "dist": "npm run vendor-ffmpeg && electron-builder --win",
+    "release:patch": "npm test && npm version patch -m \"Release %s\" && npm run dist",
+    "release:minor": "npm test && npm version minor -m \"Release %s\" && npm run dist",
+    "release:major": "npm test && npm version major -m \"Release %s\" && npm run dist"
   },
   "devDependencies": {
     "electron": "^44.4.5",
@@ -24,6 +28,11 @@
   "build": {
     "appId": "com.cutncrop.app",
     "productName": "CutnCrop",
+    "copyright": "Copyright © 2026 Lars Sima. GPL-3.0-or-later.",
+    "directories": {
+      "output": "dist/${version}",
+      "buildResources": "build"
+    },
     "files": [
       "src/**/*",
       "package.json"
@@ -32,14 +41,25 @@
       {
         "from": "vendor/ffmpeg",
         "to": "ffmpeg"
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE"
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "license": "LICENSE",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     }
   }
 }

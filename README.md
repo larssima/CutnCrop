@@ -13,8 +13,30 @@ npm install
 npm start          # launch the app
 npm test           # unit + export integration tests (generates test-media/ on first run)
 npm run drive-ui   # scripted end-to-end UI run with screenshots in test-output/ui/
-npm run dist       # bundle ffmpeg and build the Windows installer
+npm run dist       # bundle ffmpeg and build the Windows installer + zip
 ```
+
+## Building a release
+
+The version lives in `package.json` and shows up in the file names, the window title,
+Help › About and the .exe's file properties.
+
+```bash
+npm run release:patch   # 0.1.0 -> 0.1.1 (fixes)
+npm run release:minor   # 0.1.0 -> 0.2.0 (features)
+npm run release:major   # 0.1.0 -> 1.0.0 (incompatible changes)
+git push --follow-tags  # publish the release commit and its vX.Y.Z tag
+```
+
+Each release script runs the tests, bumps the version, commits "Release X.Y.Z", tags it
+`vX.Y.Z` (the working tree must be clean) and builds into `dist/X.Y.Z/`:
+
+- `CutnCrop-Setup-X.Y.Z.exe` — installer (choose folder, Start menu entry, uninstaller)
+- `CutnCrop-X.Y.Z-win-x64.zip` — standalone: extract anywhere and run `CutnCrop.exe`
+
+Update `CHANGELOG.md` before releasing. To check a build without system FFmpeg:
+`CUTNCROP_EXE=dist/X.Y.Z/win-unpacked/CutnCrop.exe npm run drive-ui`.
+The builds are not code-signed, so Windows SmartScreen asks for confirmation on first run.
 
 ## Layout
 

@@ -197,7 +197,7 @@ document.addEventListener('drop', (e) => {
 
 function updateTitle() {
   const name = store.filePath ? store.filePath.split(/[\\/]/).pop() : 'Untitled';
-  window.api.setTitle(`${store.dirty ? '• ' : ''}${name} — CutnCrop`);
+  window.api.setTitle(`${store.dirty ? '• ' : ''}${name} — CutnCrop ${window.api.version}`);
 }
 store.on('dirty', updateTitle);
 store.on('project', updateTitle);
@@ -228,6 +228,7 @@ $('#export-dialog').addEventListener('cancel', (e) => {
   if (exportDialog.running) e.preventDefault();
 });
 
+$('#brand').title = `CutnCrop ${window.api.version} — Help › About for details`;
 updateTitle();
 updateTimecode();
 updateUndoButtons();

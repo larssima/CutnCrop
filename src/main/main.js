@@ -4,7 +4,9 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { probe } from './ffmpeg/probe.js';
+import { ffmpegPaths } from './ffmpeg/paths.js';
 import { MediaPreparer } from './media/proxy.js';
 import { startExport } from './export/export.js';
 import { migrateProject } from '../shared/schema.js';
@@ -111,6 +113,31 @@ function createWindow() {
   });
 }
 
+/** First line of `ffmpeg -version`, e.g. "ffmpeg version 2026-09-10-git-… Copyright …". */
+function ffmpegVersion() {
+  const r = spawnSync(ffmpegPaths().ffmpeg, ['-version'], { encoding: 'utf8', windowsHide: true });
+  return r.status === 0 ? r.stdout.split(/\r?\n/)[0].replace(/ Copyright.*$/, '') : 'not found';
+}
+
+function showAbout() {
+  dialog.showMessageBox(win, {
+    type: 'info',
+    title: 'About CutnCrop',
+    message: `CutnCrop ${app.getVersion()}`,
+    detail: [
+      'A desktop video editor.',
+      '',
+      `FFmpeg: ${ffmpegVersion()}`,
+      `FFmpeg location: ${ffmpegPaths().ffmpeg}`,
+      `Electron ${process.versions.electron} · Chromium ${process.versions.chrome} · Node ${process.versions.node}`,
+      '',
+      'Free software under the GNU GPL v3.0 or later.',
+      'https://github.com/larssima/CutnCrop',
+    ].join('\n'),
+    buttons: ['OK'],
+  });
+}
+
 function buildMenu() {
   const cmd = (name) => () => send('menu:command', name);
   const template = [
@@ -140,6 +167,13 @@ function buildMenu() {
         { role: 'copy' },
         { role: 'paste' },
         { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        { label: 'About CutnCrop', click: () => showAbout() },
+        { label: 'Project page', click: () => shell.openExternal('https://github.com/larssima/CutnCrop') },
       ],
     },
     {
@@ -254,6 +288,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('export:cancel', () => exportJob?.cancel());
+  ipcMain.on('app:version', (e) => (e.returnValue = app.getVersion()));
   ipcMain.on('app:dirty', (_e, value) => (dirty = Boolean(value)));
   ipcMain.on('app:title', (_e, title) => win?.setTitle(title));
   ipcMain.handle('shell:showItem', (_e, p) => shell.showItemInFolder(p));
