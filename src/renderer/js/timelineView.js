@@ -93,6 +93,7 @@ export class TimelineView {
     this.content.addEventListener('pointerup', (e) => this.onPointerUp(e));
     this.content.addEventListener('pointercancel', (e) => this.onPointerUp(e));
     this.scroll.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+    this.content.addEventListener('contextmenu', (e) => this.onContextMenu(e));
 
     this.lanes.addEventListener('dragover', (e) => {
       if (e.dataTransfer.types.includes(MEDIA_DRAG_TYPE) && e.target.closest('.lane.video, .lane.audio')) {
@@ -392,6 +393,16 @@ export class TimelineView {
         else tl.updateText(p, g.id, { end: Math.max(edgeT, item.start + 0.05) });
       });
     }
+  }
+
+  /** Right-click on a clip or text item: select it and ask the app for its menu. */
+  onContextMenu(e) {
+    const itemEl = e.target.closest('.clip, .text-item');
+    if (!itemEl) return;
+    e.preventDefault();
+    const kind = itemEl.classList.contains('text-item') ? 'text' : 'clip';
+    store.select({ kind, id: itemEl.dataset.id, withLinked: e.ctrlKey && kind === 'clip' ? false : undefined });
+    store.emit('context-menu', { kind, id: itemEl.dataset.id, x: e.clientX, y: e.clientY });
   }
 
   onPointerUp(e) {

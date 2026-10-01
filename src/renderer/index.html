@@ -22,6 +22,7 @@
     <div class="toolbar-spacer"></div>
     <button data-command="import" title="Import media (Ctrl+I)">＋ Import</button>
     <button class="primary" data-command="export" title="Export video (Ctrl+E)">Export</button>
+    <button class="help-button" data-command="shortcuts" title="Keyboard shortcuts (F1)">?</button>
   </header>
 
   <main class="workspace">
@@ -111,6 +112,14 @@
       <button class="export-cancel">Close</button>
       <button class="primary export-start">Choose file &amp; export…</button>
     </div>
+  </dialog>
+
+  <dialog id="shortcuts-dialog" class="shortcuts">
+    <div class="shortcuts-head">
+      <h2>Keyboard &amp; mouse shortcuts</h2>
+      <button class="shortcuts-close" title="Close (Esc)">Close</button>
+    </div>
+    <div class="shortcuts-body"></div>
   </dialog>
 
   <div id="toast"></div>

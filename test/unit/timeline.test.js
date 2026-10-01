@@ -264,6 +264,25 @@ test('moving a linked clip pushes whatever is in its partner\'s way', () => {
   assert.deepEqual(validateProject(p), []);
 });
 
+test('duplicate puts a linked copy right after the clip and pushes later clips', () => {
+  const p = projectWithAudio();
+  const v = tl.addClip(p, 'm1'); // 0..10
+  const next = tl.addClip(p, 'm1'); // 10..20
+  tl.trimClip(p, v.id, 'in', 2); // v: 2..10, in 2
+  const copy = tl.duplicateClip(p, v.id);
+  const [copyAudio] = tl.linkedPartners(p, copy);
+  assert.deepEqual([copy.start, copy.in, copy.out], [10, 2, 10]);
+  assert.ok(copyAudio, 'the copy has its own linked sound');
+  assert.notEqual(copy.linkId, v.linkId);
+  assert.equal(copyAudio.start, 10);
+  assert.equal(next.start, 18, 'later clip pushed by the copy length');
+  assert.deepEqual(validateProject(p), []);
+
+  const x = tl.addText(p, { start: 1, end: 3, text: 'Hi' });
+  const xCopy = tl.duplicateText(p, x.id);
+  assert.deepEqual([xCopy.start, xCopy.end, xCopy.text], [3, 5, 'Hi']);
+});
+
 test('ripple delete shifts every track after the hole', () => {
   const p = projectWithAudio();
   const v1 = tl.addClip(p, 'm1');

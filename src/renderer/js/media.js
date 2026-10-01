@@ -124,6 +124,11 @@ export class MediaBin {
             const clip = store.edit((p) => tl.addClip(p, m.id));
             store.select({ kind: 'clip', id: clip.id });
           },
+          oncontextmenu: (e) => {
+            e.preventDefault();
+            store.select({ kind: 'media', id: m.id });
+            store.emit('context-menu', { kind: 'media', id: m.id, x: e.clientX, y: e.clientY });
+          },
           ondragstart: (e) => {
             e.dataTransfer.setData(MEDIA_DRAG_TYPE, m.id);
             e.dataTransfer.effectAllowed = 'copy';

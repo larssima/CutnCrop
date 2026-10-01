@@ -110,6 +110,41 @@ await page.keyboard.press('t');
 await page.waitForTimeout(500);
 await ss('04-split-text');
 
+// Right-click menus
+const menuLabels = () => page.evaluate(() => [...document.querySelectorAll('.context-menu .context-item')]
+  .map((b) => `${b.querySelector('.context-label').textContent}${b.disabled ? ' (disabled)' : ''}`));
+const clipCount = () => page.locator('.clip').count();
+await page.click('.lane.video .clip:nth-child(3)', { button: 'right', position: { x: 30, y: 20 } });
+console.log('video clip menu:', JSON.stringify(await menuLabels()));
+await ss('04a-clip-menu');
+await page.keyboard.press('Escape');
+console.log('menu closed by Esc:', (await page.locator('.context-menu').count()) === 0);
+const clipsBeforeDuplicate = await clipCount();
+await page.click('.lane.video .clip:nth-child(3)', { button: 'right', position: { x: 30, y: 20 } });
+await page.click('.context-item:has-text("Duplicate")');
+console.log('duplicate: clips', clipsBeforeDuplicate, '->', await clipCount());
+await page.keyboard.press('Control+z');
+await page.click('.lane[data-track-id=a1] .clip:nth-child(2)', { button: 'right', position: { x: 30, y: 30 } });
+console.log('sound clip menu:', JSON.stringify(await menuLabels()));
+await page.click('.context-item:has-text("Fade in 1 s")');
+console.log('fade in after menu:', await page.evaluate(() => {
+  const { store } = window.cutncrop;
+  const a1 = store.project.tracks.find((t) => t.id === 'a1');
+  return [...a1.clips].sort((a, b) => a.start - b.start)[1].fadeIn;
+}));
+await page.keyboard.press('Control+z');
+await page.click('.media-card:nth-child(5)', { button: 'right' });
+console.log('media menu:', JSON.stringify(await menuLabels()));
+await page.keyboard.press('Escape');
+
+// Shortcut chart
+await page.keyboard.press('F1');
+console.log('shortcuts dialog open:', await page.evaluate(() => document.querySelector('#shortcuts-dialog').open),
+  'groups:', await page.locator('.shortcut-group').count());
+await ss('04b-shortcuts');
+await page.keyboard.press('Escape');
+console.log('shortcuts closed by Esc:', !(await page.evaluate(() => document.querySelector('#shortcuts-dialog').open)));
+
 // Audio: clip sound sits on A1, linked. Select only the first clip's sound and
 // delete it (the video must stay), drop music in its place, drag a 1 s fade-in.
 const linkedOnA1 = await page.evaluate(() => document.querySelectorAll('.lane[data-track-id=a1] .clip .link-mark').length);

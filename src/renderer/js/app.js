@@ -5,6 +5,9 @@ import { TimelineView } from './timelineView.js';
 import { MediaBin, importPaths, prepare, listenForMediaUpdates } from './media.js';
 import { Inspector } from './inspector.js';
 import { ExportDialog } from './exportDialog.js';
+import { ShortcutsDialog } from './shortcuts.js';
+import { showItemMenu } from './clipMenus.js';
+import { isContextMenuOpen } from './contextMenu.js';
 import * as tl from '../../shared/timeline.js';
 import { createProject } from '../../shared/schema.js';
 import { formatTimecode, frameDuration } from '../../shared/time.js';
@@ -14,6 +17,7 @@ const timeline = new TimelineView($('#timeline'));
 new MediaBin($('#media-bin'));
 new Inspector($('#inspector'));
 const exportDialog = new ExportDialog($('#export-dialog'));
+const shortcutsDialog = new ShortcutsDialog($('#shortcuts-dialog'));
 listenForMediaUpdates();
 // Handle for scripted UI runs (scripts/drive-ui.mjs) and DevTools debugging.
 window.cutncrop = { store, preview };
@@ -114,6 +118,17 @@ const commands = {
     store.select({ kind: 'text', id: item.id });
   },
   closeGaps: () => store.edit((p) => tl.closeGaps(p)),
+  duplicate: () => {
+    const s = store.selection;
+    if (s?.kind === 'clip') {
+      const copy = store.edit((p) => tl.duplicateClip(p, s.id));
+      store.select({ kind: 'clip', id: copy.id, withLinked: s.withLinked });
+    } else if (s?.kind === 'text') {
+      const copy = store.edit((p) => tl.duplicateText(p, s.id));
+      store.select({ kind: 'text', id: copy.id });
+    }
+  },
+  shortcuts: () => shortcutsDialog.open(),
   unlink: () => {
     const clip = selectedClip();
     if (!clip?.linkId) return toast('Select a linked clip (marked 🔗) to unlink its video and audio.');
@@ -149,6 +164,7 @@ window.api.onCommand((name) => {
   run(name);
 });
 store.on('command', run);
+store.on('context-menu', (target) => showItemMenu(target, run));
 
 for (const btn of document.querySelectorAll('[data-command]')) {
   btn.addEventListener('click', () => run(btn.dataset.command));
@@ -157,11 +173,19 @@ for (const btn of document.querySelectorAll('[data-command]')) {
 // ---- Keyboard --------------------------------------------------------------
 
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'F1') {
+    e.preventDefault();
+    run('shortcuts');
+    return;
+  }
+  // Dialogs and popup menus own the keyboard while open.
+  if (document.querySelector('dialog[open]') || isContextMenuOpen()) return;
   const ctrl = e.ctrlKey || e.metaKey;
   if (ctrl && !isTyping()) {
     const key = e.key.toLowerCase();
     if (key === 'z' && !e.shiftKey) run('undo');
     else if (key === 'y' || (key === 'z' && e.shiftKey)) run('redo');
+    else if (key === 'd') run('duplicate');
     else return;
     e.preventDefault();
     return;
@@ -171,7 +195,7 @@ document.addEventListener('keydown', (e) => {
     ' ': 'play', k: 'play',
     s: 'split', t: 'addText', d: 'unlink', m: 'toggleMute',
     Delete: e.shiftKey ? 'rippleDelete' : 'delete', Backspace: 'delete',
-    Home: 'start', End: 'end', Escape: 'closeSource',
+    Home: 'start', End: 'end', Escape: 'closeSource', '?': 'shortcuts',
     '+': 'zoomIn', '=': 'zoomIn', '-': 'zoomOut', '\\': 'zoomFit',
   };
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {

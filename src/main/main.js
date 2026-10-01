@@ -172,6 +172,9 @@ function buildMenu() {
     {
       label: 'Help',
       submenu: [
+        // F1 is handled by the renderer's key handler (works in dialogs too).
+        { label: 'Keyboard Shortcuts', accelerator: 'F1', registerAccelerator: false, click: cmd('shortcuts') },
+        { type: 'separator' },
         { label: 'About CutnCrop', click: () => showAbout() },
         { label: 'Project page', click: () => shell.openExternal('https://github.com/larssima/CutnCrop') },
       ],

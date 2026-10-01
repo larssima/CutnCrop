@@ -83,6 +83,9 @@ linked, unlinked and moved audio against the flashes, the mix level, fades and m
 
 ## Keyboard
 
+The full keyboard and mouse chart is in the app under **Help › Keyboard Shortcuts** (F1).
+Right-click a clip, text item or media file for a menu of everything you can do with it.
+
 | Key | Action |
 |---|---|
 | Click a media file | Preview it on its own (source monitor); Esc returns to the timeline |
@@ -91,6 +94,8 @@ linked, unlinked and moved audio against the flashes, the mix level, fades and m
 | Home / End | Go to start / end |
 | S | Split at playhead |
 | T | Add text at playhead |
+| Ctrl+D | Duplicate the selected clip or text |
+| F1 / ? | Keyboard & mouse shortcut chart |
 | D | Unlink the selected clip's video and audio |
 | M | Mute / unmute the selected clip's sound |
 | Del | Delete selection (Shift+Del: ripple delete) |

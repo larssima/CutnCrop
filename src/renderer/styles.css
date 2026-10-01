@@ -305,6 +305,51 @@ dialog .export-status { min-height: 18px; color: var(--text-dim); word-break: br
 dialog[data-state=error] .export-status { color: #fca5a5; }
 dialog[data-state=done] .export-status { color: #86efac; }
 
+.help-button { min-width: 30px; padding: 5px 0; font-weight: 700; }
+
+/* ---- Context menu ---- */
+.context-menu {
+  position: fixed; z-index: 300; min-width: 220px; padding: 4px;
+  display: flex; flex-direction: column;
+  background: #23262e; border: 1px solid #3a3e4a; border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.5);
+}
+.context-item {
+  display: flex; justify-content: space-between; gap: 24px; align-items: center;
+  padding: 6px 10px; border: 0; border-radius: 5px; background: transparent; text-align: left;
+}
+.context-item:hover:not(:disabled), .context-item:focus-visible { background: var(--accent-2); border: 0; outline: none; color: #fff; }
+.context-item.danger:hover:not(:disabled), .context-item.danger:focus-visible { background: #b91c1c; }
+.context-item:disabled { opacity: 0.4; }
+.context-shortcut { color: var(--text-dim); font-size: 11px; }
+.context-item:hover:not(:disabled) .context-shortcut, .context-item:focus-visible .context-shortcut { color: rgb(255 255 255 / 0.8); }
+.context-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+
+/* ---- Shortcuts chart ---- */
+dialog.shortcuts { width: min(860px, 92vw); max-height: 86vh; padding: 0; overflow: hidden; }
+dialog.shortcuts[open] { display: flex; flex-direction: column; }
+.shortcuts-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+}
+.shortcuts-head h2 { margin: 0; }
+.shortcuts-body {
+  overflow-y: auto; padding: 8px 20px 20px;
+  columns: 2 360px; column-gap: 32px;
+}
+.shortcut-group { break-inside: avoid; margin-top: 12px; }
+.shortcut-group h3 {
+  margin: 0 0 6px; font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--accent);
+}
+.shortcut-group dl { display: grid; grid-template-columns: minmax(130px, auto) 1fr; gap: 5px 14px; margin: 0; }
+.shortcut-group dt { color: var(--text-dim); white-space: nowrap; }
+.shortcut-group dd { margin: 0; }
+kbd {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  background: var(--panel-2); border: 1px solid #3a3e4a; border-bottom-width: 2px;
+  font: 11px Consolas, 'Cascadia Mono', monospace; color: var(--text);
+}
+
 #toast {
   position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px);
   max-width: 70vw; padding: 10px 16px; border-radius: 8px;

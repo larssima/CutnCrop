@@ -342,6 +342,35 @@ export function deleteClip(project, clipId, { ripple = false, withLinked } = {})
   }
 }
 
+/**
+ * Duplicate a clip (with its linked clips, which stay linked to each other)
+ * right after the original. Later clips are pushed to make room.
+ * Returns the copy of clipId.
+ */
+export function duplicateClip(project, clipId) {
+  const clip = findClip(project, clipId);
+  const group = linkGroup(project, clip);
+  const newLink = clip.linkId ? newId('l') : undefined;
+  const start = clipEnd(clip);
+  let result = null;
+  for (const c of group) {
+    const copy = { ...c, id: newId('c'), start };
+    if (newLink) copy.linkId = newLink;
+    trackOfClip(project, c.id).clips.push(copy);
+    if (c === clip) result = copy;
+  }
+  resolveOverlaps(project, linkGroup(project, result).map((c) => c.id));
+  return result;
+}
+
+/** Duplicate a text item right after the original. */
+export function duplicateText(project, itemId) {
+  const item = findText(project, itemId);
+  const copy = { ...item, id: newId('x'), start: item.end, end: round6(item.end + (item.end - item.start)) };
+  textTrack(project).items.push(copy);
+  return copy;
+}
+
 /** Remove every gap on the video track so clips play back to back; linked audio follows. */
 export function closeGaps(project) {
   let cursor = 0;
