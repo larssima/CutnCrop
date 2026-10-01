@@ -42,6 +42,23 @@ function selectedClip() {
   return s?.kind === 'clip' ? tl.findClip(store.project, s.id) : null;
 }
 
+/** Close the gap before (or after) the selected clip or text item by moving it. */
+function moveAgainstNeighbor(direction) {
+  const s = store.selection;
+  if (s?.kind !== 'clip' && s?.kind !== 'text') return toast('Select a clip or text first.');
+  const p = store.project;
+  const item = s.kind === 'clip' ? tl.findClip(p, s.id) : tl.findText(p, s.id);
+  const end = s.kind === 'clip' ? tl.clipEnd(item) : item.end;
+  if (direction === 'previous') {
+    if (item.start - tl.previousEnd(p, s.id) < 1e-6) return toast('No gap before this clip.');
+    store.edit((proj) => tl.moveToPreviousEnd(proj, s.id));
+  } else {
+    const next = tl.nextStart(p, s.id);
+    if (next === null || next - end < 1e-6) return toast('No gap after this clip.');
+    store.edit((proj) => tl.moveToNextStart(proj, s.id));
+  }
+}
+
 /** The clip to split: the selected one if the playhead is over it, else the video clip under the playhead. */
 function clipToSplit() {
   const s = store.selection;
@@ -129,6 +146,8 @@ const commands = {
     }
   },
   shortcuts: () => shortcutsDialog.open(),
+  moveToPrevious: () => moveAgainstNeighbor('previous'),
+  moveToNext: () => moveAgainstNeighbor('next'),
   unlink: () => {
     const clip = selectedClip();
     if (!clip?.linkId) return toast('Select a linked clip (marked 🔗) to unlink its video and audio.');
@@ -186,6 +205,8 @@ document.addEventListener('keydown', (e) => {
     if (key === 'z' && !e.shiftKey) run('undo');
     else if (key === 'y' || (key === 'z' && e.shiftKey)) run('redo');
     else if (key === 'd') run('duplicate');
+    else if (e.key === 'ArrowLeft') run('moveToPrevious');
+    else if (e.key === 'ArrowRight') run('moveToNext');
     else return;
     e.preventDefault();
     return;

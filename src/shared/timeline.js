@@ -343,6 +343,91 @@ export function deleteClip(project, clipId, { ripple = false, withLinked } = {})
 }
 
 /**
+ * Where a clip or text item would land if moved left against its neighbor:
+ * the end of the previous item on the same track, or 0. Null for an unknown id.
+ */
+export function previousEnd(project, id) {
+  const { items, item, start } = neighborsOf(project, id) ?? {};
+  if (!item) return null;
+  return items.reduce((best, x) => (x !== item && x.end <= start + 1e-6 ? Math.max(best, x.end) : best), 0);
+}
+
+/** Start of the next item on the same track, or null if there is none. */
+export function nextStart(project, id) {
+  const { items, item, end } = neighborsOf(project, id) ?? {};
+  if (!item) return null;
+  const starts = items.filter((x) => x !== item && x.start >= end - 1e-6).map((x) => x.start);
+  return starts.length ? Math.min(...starts) : null;
+}
+
+/** The items on the track of a clip or text item, as { start, end } spans. */
+function neighborsOf(project, id) {
+  const clip = findClip(project, id);
+  if (clip) {
+    const items = trackOfClip(project, id).clips.map((c) => ({ ref: c, start: c.start, end: clipEnd(c) }));
+    const item = items.find((x) => x.ref === clip);
+    return { items, item, start: item.start, end: item.end };
+  }
+  const text = findText(project, id);
+  if (!text) return null;
+  const items = textTrack(project).items.map((x) => ({ ref: x, start: x.start, end: x.end }));
+  const item = items.find((x) => x.ref === text);
+  return { items, item, start: item.start, end: item.end };
+}
+
+/** Move a clip (and its linked clips) or a text item left to touch the previous item. */
+export function moveToPreviousEnd(project, id) {
+  const target = previousEnd(project, id);
+  if (target === null) return;
+  if (findClip(project, id)) moveClip(project, id, target);
+  else {
+    const x = findText(project, id);
+    updateText(project, id, { start: target, end: target + (x.end - x.start) });
+  }
+}
+
+/** Move a clip (and its linked clips) or a text item right so it ends where the next item starts. */
+export function moveToNextStart(project, id) {
+  const next = nextStart(project, id);
+  if (next === null) return;
+  const clip = findClip(project, id);
+  if (clip) moveClip(project, id, next - clipDuration(clip));
+  else {
+    const x = findText(project, id);
+    updateText(project, id, { start: next - (x.end - x.start), end: next });
+  }
+}
+
+/** The empty span [start, end) on a clip track around time t, or null if t is on a clip or after the last one. */
+export function gapAt(project, trackId, t) {
+  const track = findTrack(project, trackId);
+  if (!track?.clips) return null;
+  if (track.clips.some((c) => t >= c.start - 1e-6 && t < clipEnd(c) - 1e-6)) return null;
+  const end = track.clips.filter((c) => c.start >= t - 1e-6).reduce((min, c) => Math.min(min, c.start), Infinity);
+  if (end === Infinity) return null;
+  const start = track.clips.filter((c) => clipEnd(c) <= t + 1e-6).reduce((max, c) => Math.max(max, clipEnd(c)), 0);
+  return end - start > 1e-6 ? { start: round6(start), end: round6(end) } : null;
+}
+
+/**
+ * Close the gap at time t on a track: every clip after it on that track moves
+ * left by the gap's length, taking linked clips along.
+ */
+export function closeGapAt(project, trackId, t) {
+  const gap = gapAt(project, trackId, t);
+  if (!gap) return false;
+  const shift = gap.end - gap.start;
+  const moved = new Set();
+  for (const c of findTrack(project, trackId).clips) {
+    if (c.start < gap.end - 1e-6) continue;
+    for (const m of linkGroup(project, c)) moved.add(m);
+  }
+  for (const m of moved) m.start = round6(m.start - shift);
+  resolveOverlaps(project, [...moved].map((m) => m.id));
+  return true;
+}
+
+/**
  * Duplicate a clip (with its linked clips, which stay linked to each other)
  * right after the original. Later clips are pushed to make room.
  * Returns the copy of clipId.

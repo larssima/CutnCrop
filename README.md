@@ -95,6 +95,7 @@ Right-click a clip, text item or media file for a menu of everything you can do 
 | S | Split at playhead |
 | T | Add text at playhead |
 | Ctrl+D | Duplicate the selected clip or text |
+| Ctrl+← / Ctrl+→ | Move the selected clip to the end of the previous / start of the next clip |
 | F1 / ? | Keyboard & mouse shortcut chart |
 | D | Unlink the selected clip's video and audio |
 | M | Mute / unmute the selected clip's sound |

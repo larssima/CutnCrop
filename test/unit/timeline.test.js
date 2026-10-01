@@ -283,6 +283,47 @@ test('duplicate puts a linked copy right after the clip and pushes later clips',
   assert.deepEqual([xCopy.start, xCopy.end, xCopy.text], [3, 5, 'Hi']);
 });
 
+test('move to end of previous clip / start of next clip', () => {
+  const p = projectWithAudio();
+  const a = tl.addClip(p, 'm1', 0); // 0..10
+  const b = tl.addClip(p, 'm1', 14); // 14..24
+  const c = tl.addClip(p, 'm1', 30); // 30..40
+  const [bSound] = tl.linkedPartners(p, b);
+
+  assert.equal(tl.previousEnd(p, b.id), 10);
+  tl.moveToPreviousEnd(p, b.id);
+  assert.deepEqual([b.start, bSound.start], [10, 10], 'video and its sound move together');
+
+  assert.equal(tl.nextStart(p, b.id), 30);
+  tl.moveToNextStart(p, b.id);
+  assert.equal(b.start, 20, 'b now ends where c starts');
+
+  tl.moveToPreviousEnd(p, a.id);
+  assert.equal(a.start, 0, 'first clip goes to 0');
+  assert.equal(tl.nextStart(p, c.id), null);
+  assert.deepEqual(validateProject(p), []);
+
+  const x = tl.addText(p, { start: 1, end: 3 });
+  const y = tl.addText(p, { start: 6, end: 7 });
+  tl.moveToPreviousEnd(p, y.id);
+  assert.deepEqual([y.start, y.end], [3, 4]);
+  assert.ok(x);
+});
+
+test('close gap pulls everything after it left, with linked sound', () => {
+  const p = projectWithAudio();
+  tl.addClip(p, 'm1', 0); // 0..10
+  const b = tl.addClip(p, 'm1', 14); // 14..24
+  const c = tl.addClip(p, 'm1', 30); // 30..40
+  assert.deepEqual(tl.gapAt(p, 'v1', 12), { start: 10, end: 14 });
+  assert.equal(tl.gapAt(p, 'v1', 5), null, 'on a clip');
+  assert.equal(tl.gapAt(p, 'v1', 50), null, 'after the last clip');
+  assert.equal(tl.closeGapAt(p, 'v1', 12), true);
+  const [cSound] = tl.linkedPartners(p, c);
+  assert.deepEqual([b.start, c.start, cSound.start], [10, 26, 26]);
+  assert.deepEqual(validateProject(p), []);
+});
+
 test('ripple delete shifts every track after the hole', () => {
   const p = projectWithAudio();
   const v1 = tl.addClip(p, 'm1');

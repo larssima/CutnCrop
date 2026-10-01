@@ -22,6 +22,8 @@ export const SHORTCUTS = [
       ['Ctrl+Y  /  Ctrl+Shift+Z', 'Redo'],
       ['S', 'Split at playhead'],
       ['Ctrl+D', 'Duplicate selected clip or text'],
+      ['Ctrl+←', 'Move selection left to the end of the previous clip (closes the gap)'],
+      ['Ctrl+→', 'Move selection right to the start of the next clip'],
       ['Del  /  Backspace', 'Delete selection'],
       ['Shift+Del', 'Ripple delete (close the gap on all lanes)'],
       ['D', 'Unlink a clip from its sound'],
@@ -63,6 +65,7 @@ export const SHORTCUTS = [
       ['Drag round handles on sound clip', 'Fade in / fade out'],
       ['Click / drag the ruler', 'Move the playhead / scrub'],
       ['Right-click clip, text or media file', 'Menu with everything you can do with it'],
+      ['Right-click a gap between clips', 'Close gap (pulls the following clips left)'],
     ],
   },
   {

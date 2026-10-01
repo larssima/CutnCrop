@@ -398,7 +398,16 @@ export class TimelineView {
   /** Right-click on a clip or text item: select it and ask the app for its menu. */
   onContextMenu(e) {
     const itemEl = e.target.closest('.clip, .text-item');
-    if (!itemEl) return;
+    if (!itemEl) {
+      // Right-click on empty space between clips: offer to close that gap.
+      const lane = e.target.closest('.lane.video, .lane.audio');
+      const t = this.timeAt(e.clientX);
+      if (lane && tl.gapAt(store.project, lane.dataset.trackId, t)) {
+        e.preventDefault();
+        store.emit('context-menu', { kind: 'gap', trackId: lane.dataset.trackId, t, x: e.clientX, y: e.clientY });
+      }
+      return;
+    }
     e.preventDefault();
     const kind = itemEl.classList.contains('text-item') ? 'text' : 'clip';
     store.select({ kind, id: itemEl.dataset.id, withLinked: e.ctrlKey && kind === 'clip' ? false : undefined });

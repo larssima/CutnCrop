@@ -10,6 +10,9 @@ MAJOR for incompatible project-file or behavior changes, MINOR for new features,
 - Right-click menus for clips, text and media files (split, duplicate, unlink, mute,
   fades, go to start/end, preview source, show in Explorer, delete variants).
 - Duplicate (Ctrl+D) for clips (with their linked sound) and text.
+- Close gaps without dragging: Ctrl+← moves the selected clip to the end of the previous
+  clip, Ctrl+→ to the start of the next one; right-click a gap → "Close gap" pulls
+  everything after it left.
 - Keyboard & mouse shortcut chart: Help › Keyboard Shortcuts, F1, ? or the ? button.
 - Fix: scrubbing right after pausing could leave the previous frame on screen.
 

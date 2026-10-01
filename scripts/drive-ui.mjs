@@ -145,6 +145,26 @@ await ss('04b-shortcuts');
 await page.keyboard.press('Escape');
 console.log('shortcuts closed by Esc:', !(await page.evaluate(() => document.querySelector('#shortcuts-dialog').open)));
 
+// Gaps: delete the middle-left clip (2..5) to leave a 3 s gap, then close it two ways.
+const videoStarts = () => page.evaluate(() =>
+  window.cutncrop.store.project.tracks.find((t) => t.id === 'v1').clips.map((c) => c.start).sort((a, b) => a - b));
+await page.click('.lane.video .clip:nth-child(2)', { position: { x: 30, y: 20 } });
+await page.keyboard.press('Delete');
+console.log('gap made, video starts:', JSON.stringify(await videoStarts()));
+await page.click('.lane.video .clip:nth-child(2)', { position: { x: 30, y: 20 } }); // now the clip after the gap
+await page.keyboard.press('Control+ArrowLeft');
+console.log('Ctrl+← on clip after gap:', JSON.stringify(await videoStarts()));
+await page.keyboard.press('Control+z');
+const zoomNow2 = await page.evaluate(() => window.cutncrop.store.zoom);
+const laneBox = await page.locator('.lane.video').boundingBox();
+await page.mouse.click(laneBox.x + 3.5 * zoomNow2, laneBox.y + 30, { button: 'right' }); // inside the gap
+console.log('gap menu:', JSON.stringify(await menuLabels()));
+await page.click('.context-item:has-text("Close gap")');
+console.log('after Close gap:', JSON.stringify(await videoStarts()));
+await page.keyboard.press('Control+z');
+await page.keyboard.press('Control+z'); // restore the deleted clip
+console.log('restored:', JSON.stringify(await videoStarts()));
+
 // Audio: clip sound sits on A1, linked. Select only the first clip's sound and
 // delete it (the video must stay), drop music in its place, drag a 1 s fade-in.
 const linkedOnA1 = await page.evaluate(() => document.querySelectorAll('.lane[data-track-id=a1] .clip .link-mark').length);

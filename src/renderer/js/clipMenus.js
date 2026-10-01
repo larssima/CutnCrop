@@ -5,10 +5,37 @@ import { store } from './store.js';
 import { showContextMenu } from './contextMenu.js';
 import * as tl from '../../shared/timeline.js';
 
-/** Open the menu for { kind: 'clip' | 'text' | 'media', id } at (x, y). */
-export function showItemMenu({ kind, id, x, y }, run) {
-  const items = kind === 'clip' ? clipItems(id, run) : kind === 'text' ? textItems(id, run) : mediaItems(id, run);
+/** Open the menu for { kind: 'clip' | 'text' | 'media' | 'gap', id | trackId+t } at (x, y). */
+export function showItemMenu(target, run) {
+  const { kind, id, x, y } = target;
+  const items =
+    kind === 'clip' ? clipItems(id, run)
+    : kind === 'text' ? textItems(id, run)
+    : kind === 'gap' ? gapItems(target)
+    : mediaItems(id, run);
   if (items) showContextMenu(x, y, items);
+}
+
+/** "Move to end of previous / start of next" items, disabled when there is no gap. */
+function gapMoveItems(id, start, end, run) {
+  const p = store.project;
+  const prev = tl.previousEnd(p, id);
+  const next = tl.nextStart(p, id);
+  return [
+    { label: 'Move to end of previous clip', shortcut: 'Ctrl+←', disabled: start - prev < 1e-6, action: () => run('moveToPrevious') },
+    { label: 'Move to start of next clip', shortcut: 'Ctrl+→', disabled: next === null || next - end < 1e-6, action: () => run('moveToNext') },
+  ];
+}
+
+function gapItems({ trackId, t }) {
+  const gap = tl.gapAt(store.project, trackId, t);
+  if (!gap) return null;
+  return [
+    {
+      label: `Close gap (${(gap.end - gap.start).toFixed(2)} s)`,
+      action: () => store.edit((p) => tl.closeGapAt(p, trackId, t)),
+    },
+  ];
 }
 
 function previewSource(mediaId, time = 0) {
@@ -33,6 +60,7 @@ function clipItems(id, run) {
   return [
     { label: 'Split at playhead', shortcut: 'S', disabled: !playheadInside, action: () => run('split') },
     { label: 'Duplicate', shortcut: 'Ctrl+D', action: () => run('duplicate') },
+    ...gapMoveItems(id, clip.start, end, run),
     '-',
     clip.linkId && { label: isVideo ? 'Unlink video and sound' : 'Unlink from video', shortcut: 'D', action: () => run('unlink') },
     sound && { label: sound.muted ? 'Unmute sound' : 'Mute sound', shortcut: 'M', action: () => run('toggleMute') },
@@ -63,6 +91,7 @@ function textItems(id, run) {
   if (!item) return null;
   return [
     { label: 'Duplicate', shortcut: 'Ctrl+D', action: () => run('duplicate') },
+    ...gapMoveItems(id, item.start, item.end, run),
     { label: 'Go to text start', action: () => store.setPlayhead(item.start) },
     '-',
     { label: 'Delete', shortcut: 'Del', danger: true, action: () => run('delete') },
