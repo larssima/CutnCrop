@@ -116,7 +116,10 @@ export class MediaBin {
         return h(`div.media-card${selected ? '.selected' : ''}`, {
           draggable: true,
           title: m.path,
-          onclick: () => store.select({ kind: 'media', id: m.id }),
+          onclick: () => {
+            store.select({ kind: 'media', id: m.id });
+            store.openSource(m.id); // preview the file without putting it on the timeline
+          },
           ondblclick: () => {
             const clip = store.edit((p) => tl.addClip(p, m.id));
             store.select({ kind: 'clip', id: clip.id });

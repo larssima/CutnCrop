@@ -47,9 +47,22 @@ function clipToSplit() {
   return tl.clipAt(store.project, t);
 }
 
+/** The media file shown in the source monitor, or null when the preview shows the timeline. */
+function sourceMedia() {
+  return store.source ? tl.findMedia(store.project, store.source.mediaId) : null;
+}
+
+/** Frame rate for stepping and timecode: the source file's, or the project's. */
+function activeFps() {
+  return sourceMedia()?.fps || store.project.settings.fps;
+}
+
+/** Move the active time (source or timeline) by whole frames. */
 function step(frames) {
   preview.pause();
-  store.setPlayhead(store.playhead + frames * frameDuration(store.project.settings.fps));
+  const delta = frames * frameDuration(activeFps());
+  if (store.source) store.setSourceTime(store.source.time + delta);
+  else store.setPlayhead(store.playhead + delta);
 }
 
 const commands = {
@@ -117,8 +130,9 @@ const commands = {
   zoomIn: () => store.setZoom(store.zoom * 1.5),
   zoomOut: () => store.setZoom(store.zoom / 1.5),
   zoomFit: () => timeline.zoomToFit(),
-  start: () => store.setPlayhead(0),
-  end: () => store.setPlayhead(tl.projectDuration(store.project)),
+  start: () => (store.source ? store.setSourceTime(0) : store.setPlayhead(0)),
+  end: () => (store.source ? store.setSourceTime(sourceMedia().duration) : store.setPlayhead(tl.projectDuration(store.project))),
+  closeSource: () => store.closeSource(),
   prevFrame: () => step(-1),
   nextFrame: () => step(1),
 };
@@ -157,12 +171,12 @@ document.addEventListener('keydown', (e) => {
     ' ': 'play', k: 'play',
     s: 'split', t: 'addText', d: 'unlink', m: 'toggleMute',
     Delete: e.shiftKey ? 'rippleDelete' : 'delete', Backspace: 'delete',
-    Home: 'start', End: 'end',
+    Home: 'start', End: 'end', Escape: 'closeSource',
     '+': 'zoomIn', '=': 'zoomIn', '-': 'zoomOut', '\\': 'zoomFit',
   };
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     const dir = e.key === 'ArrowLeft' ? -1 : 1;
-    step(dir * (e.shiftKey ? Math.round(store.project.settings.fps) : 1));
+    step(dir * (e.shiftKey ? Math.round(activeFps()) : 1));
     e.preventDefault();
     return;
   }
@@ -203,12 +217,16 @@ store.on('dirty', updateTitle);
 store.on('project', updateTitle);
 
 function updateTimecode() {
-  const { fps } = store.project.settings;
-  $('#timecode').textContent = formatTimecode(store.playhead, fps);
-  $('#duration').textContent = formatTimecode(tl.projectDuration(store.project), fps);
+  const fps = activeFps();
+  const media = sourceMedia();
+  $('#timecode').textContent = formatTimecode(media ? store.source.time : store.playhead, fps);
+  $('#duration').textContent = formatTimecode(media ? media.duration : tl.projectDuration(store.project), fps);
+  $('#timecode').classList.toggle('source', Boolean(media));
 }
 store.on('playhead', updateTimecode);
 store.on('project', updateTimecode);
+store.on('source', updateTimecode);
+store.on('source-time', updateTimecode);
 store.on('playstate', (playing) => {
   const btn = $('#play-button');
   btn.textContent = playing ? '❚❚' : '▶';

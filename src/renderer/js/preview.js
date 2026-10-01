@@ -1,6 +1,10 @@
 // Timeline playback in a single <video> element. While a clip plays, the video's
 // own clock drives the playhead (smooth audio); in gaps the wall clock does.
 // While the video is loading or seeking the playhead holds, so it never jumps back.
+//
+// Source mode (store.source set): the same element shows one media file on its
+// own, with its own time and a scrub bar, so files can be checked before they
+// go on the timeline.
 
 import { store } from './store.js';
 import { mediaUrl, h, $ } from './util.js';
@@ -16,6 +20,9 @@ export class Preview {
     this.video = $('video', root);
     this.overlay = $('.text-overlay', root);
     this.message = $('.preview-message', root);
+    this.sourceBadge = $('.source-badge', root);
+    this.sourceBar = $('.source-bar', root);
+    this.sourceFill = $('.source-fill', root);
     this.playing = false;
     this.lastTick = 0;
     this.currentSrc = null;
@@ -38,13 +45,57 @@ export class Preview {
       if (!this.playing) this.sync();
     });
     store.on('media-status', () => this.sync());
+    store.on('source', () => this.onSourceChange());
+    store.on('source-time', () => {
+      this.renderSourceBar();
+      if (!this.playing) this.sync();
+    });
+    $('.source-close', root).addEventListener('click', () => store.closeSource());
+
+    // Scrub bar: click or drag to move through the source file.
+    const scrubTo = (e) => {
+      const media = this.sourceMedia();
+      if (!media) return;
+      const box = this.sourceBar.getBoundingClientRect();
+      store.setSourceTime(((e.clientX - box.left) / box.width) * media.duration);
+    };
+    this.sourceBar.addEventListener('pointerdown', (e) => {
+      if (this.playing) this.pause();
+      this.sourceBar.setPointerCapture(e.pointerId);
+      scrubTo(e);
+    });
+    this.sourceBar.addEventListener('pointermove', (e) => {
+      if (this.sourceBar.hasPointerCapture(e.pointerId)) scrubTo(e);
+    });
+
     new ResizeObserver(() => this.fitFrame()).observe(this.frame.parentElement);
     this.fitFrame();
   }
 
-  /** Size the frame to the project aspect ratio inside the available area. */
+  sourceMedia() {
+    return store.source ? findMedia(store.project, store.source.mediaId) : null;
+  }
+
+  onSourceChange() {
+    if (this.playing) this.pause();
+    const media = this.sourceMedia();
+    this.sourceBadge.hidden = !media;
+    this.sourceBar.hidden = !media;
+    if (media) this.sourceBadge.querySelector('.source-name').textContent = media.name;
+    this.fitFrame();
+    this.renderSourceBar();
+    this.sync();
+  }
+
+  renderSourceBar() {
+    const media = this.sourceMedia();
+    if (media) this.sourceFill.style.width = `${(store.source.time / media.duration) * 100}%`;
+  }
+
+  /** Size the frame to the project (or source file) aspect ratio inside the available area. */
   fitFrame() {
-    const { width, height } = store.project.settings;
+    const media = this.sourceMedia();
+    const { width, height } = media?.hasVideo ? media : store.project.settings;
     const box = this.frame.parentElement.getBoundingClientRect();
     const scale = Math.min(box.width / width, box.height / height);
     this.frame.style.width = `${Math.floor(width * scale)}px`;
@@ -58,9 +109,14 @@ export class Preview {
   }
 
   play() {
-    const duration = projectDuration(store.project);
-    if (duration <= 0) return;
-    if (store.playhead >= duration - frameDuration(store.project.settings.fps)) store.setPlayhead(0);
+    const media = this.sourceMedia();
+    if (media) {
+      if (store.source.time >= media.duration - 0.05) store.setSourceTime(0);
+    } else {
+      const duration = projectDuration(store.project);
+      if (duration <= 0) return;
+      if (store.playhead >= duration - frameDuration(store.project.settings.fps)) store.setPlayhead(0);
+    }
     this.playing = true;
     this.lastTick = performance.now();
     store.emit('playstate', true);
@@ -71,6 +127,9 @@ export class Preview {
   pause() {
     this.playing = false;
     this.video.pause();
+    // Stay on the frame where playback stopped instead of seeking back to the
+    // slightly older time of the last animation frame.
+    if (store.source && this.currentSrc && this.video.readyState >= 2) store.setSourceTime(this.video.currentTime);
     this.audio.stopAll();
     store.emit('playstate', false);
     this.sync();
@@ -81,6 +140,19 @@ export class Preview {
     const now = performance.now();
     const dt = (now - this.lastTick) / 1000;
     this.lastTick = now;
+
+    const media = this.sourceMedia();
+    if (media) {
+      // Source mode: the file's own clock is the time.
+      if (this.videoReady()) store.setSourceTime(this.video.currentTime);
+      if (this.video.ended || store.source.time >= media.duration - 0.01) {
+        store.setSourceTime(media.duration);
+        this.pause();
+        return;
+      }
+      requestAnimationFrame(() => this.tick());
+      return;
+    }
 
     const project = store.project;
     const clip = clipAt(project, store.playhead);
@@ -124,8 +196,9 @@ export class Preview {
     return Boolean(media && this.sourceFor(media));
   }
 
-  /** Make the video element show the right frame for the playhead. */
+  /** Make the video element show the right frame for the playhead (or source time). */
   sync() {
+    if (store.source) return this.syncSource();
     const project = store.project;
     const t = store.playhead;
     const clip = clipAt(project, t);
@@ -177,6 +250,44 @@ export class Preview {
     }
   }
 
+  /** Source mode: show the selected media file at store.source.time. */
+  syncSource() {
+    const media = this.sourceMedia();
+    if (!media) return store.closeSource();
+    this.overlay.replaceChildren(); // timeline text doesn't belong on a source file
+    this.lastTextKey = null;
+    this.audio.stopAll();
+
+    const src = this.sourceFor(media);
+    if (!src) {
+      this.video.style.visibility = 'hidden';
+      const pct = Math.round((store.mediaStatus.get(media.id)?.proxyProgress ?? 0) * 100);
+      this.showMessage(`Preparing preview… ${pct}%`);
+      return;
+    }
+    // Audio files play through the same element; show a placeholder instead of a picture.
+    this.video.style.visibility = media.hasVideo ? 'visible' : 'hidden';
+    this.showMessage(media.hasVideo ? null : `♪ ${media.name}`);
+
+    const target = store.source.time;
+    if (this.currentSrc !== src) {
+      this.currentSrc = src;
+      this.video.src = mediaUrl(src);
+      this.video.currentTime = target;
+    }
+    this.video.volume = 1;
+    if (this.playing) {
+      this.video.muted = false;
+      if (this.video.paused) {
+        this.seek(target);
+        this.video.play().catch(() => {});
+      }
+    } else {
+      if (!this.video.paused) this.video.pause();
+      this.seek(target);
+    }
+  }
+
   /** Coalesce seeks while one is in flight so scrubbing stays responsive. */
   seek(time) {
     if (this.video.seeking) {
@@ -188,9 +299,14 @@ export class Preview {
 
   flushSeek() {
     if (this.pendingSeek === null) return;
-    const t = this.pendingSeek;
-    this.pendingSeek = null;
-    this.seek(t);
+    // Issue the queued seek on the next frame, not inside the 'seeked' handler:
+    // Chromium updates currentTime for a seek started there but never paints its frame.
+    requestAnimationFrame(() => {
+      if (this.pendingSeek === null) return;
+      const t = this.pendingSeek;
+      this.pendingSeek = null;
+      this.seek(t);
+    });
   }
 
   showMessage(text) {

@@ -20,6 +20,9 @@ class Store extends EventTarget {
     // when a video clip was Ctrl+clicked to select it without its sound.
     this.selection = null;
     this.playhead = 0;
+    // Source monitor: when set, the preview shows a media file on its own
+    // ({ mediaId, time }) instead of the timeline.
+    this.source = null;
     this.zoom = 60; // timeline pixels per second
     this.mediaStatus = new Map(); // mediaId -> { proxyProgress, error }
     this.undoStack = [];
@@ -43,11 +46,13 @@ class Store extends EventTarget {
     this.undoStack = [];
     this.redoStack = [];
     this.selection = null;
+    this.source = null;
     this.playhead = 0;
     this.mediaStatus.clear();
     this.setDirty(false);
     this.emit('project');
     this.emit('selection');
+    this.emit('source');
     this.emit('playhead');
   }
 
@@ -125,6 +130,7 @@ class Store extends EventTarget {
 
   changed() {
     this.validateSelection();
+    if (this.source && !this.project.media.some((m) => m.id === this.source.mediaId)) this.closeSource();
     if (!this.dirty) this.setDirty(true);
     this.emit('project');
   }
@@ -140,7 +146,32 @@ class Store extends EventTarget {
     if (!exists) this.select(null);
   }
 
+  /** Show a media file in the preview (source monitor). */
+  openSource(mediaId) {
+    if (this.source?.mediaId === mediaId) return;
+    this.source = { mediaId, time: 0 };
+    this.emit('source');
+  }
+
+  /** Back to showing the timeline. */
+  closeSource() {
+    if (!this.source) return;
+    this.source = null;
+    this.emit('source');
+  }
+
+  setSourceTime(t) {
+    const media = this.project.media.find((m) => m.id === this.source?.mediaId);
+    if (!media) return;
+    const clamped = Math.max(0, Math.min(t, media.duration));
+    if (clamped === this.source.time) return;
+    this.source.time = clamped;
+    this.emit('source-time');
+  }
+
   select(selection) {
+    // Selecting anything on the timeline leaves the source monitor.
+    if (selection && selection.kind !== 'media') this.closeSource();
     const same =
       selection?.id === this.selection?.id &&
       selection?.kind === this.selection?.kind &&
@@ -151,6 +182,7 @@ class Store extends EventTarget {
   }
 
   setPlayhead(t) {
+    this.closeSource(); // moving the timeline playhead means looking at the timeline
     const clamped = Math.max(0, Math.min(t, Math.max(projectDuration(this.project), 0)));
     if (clamped === this.playhead) return;
     this.playhead = clamped;

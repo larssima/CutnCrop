@@ -58,6 +58,43 @@ await page.waitForFunction((n) => document.querySelectorAll('.media-card').lengt
 await page.waitForFunction(() => !document.querySelector('.media-card .progress'), null, { timeout: 90_000 });
 await ss('02-imported');
 
+// Source monitor: click a media file to preview it without adding it to the timeline
+const sourceState = () => page.evaluate(() => {
+  const { store } = window.cutncrop;
+  const v = document.querySelector('video');
+  return {
+    badge: !document.querySelector('.source-badge').hidden ? document.querySelector('.source-name').textContent : null,
+    time: store.source ? +store.source.time.toFixed(2) : null,
+    videoTime: +v.currentTime.toFixed(2),
+    seeking: v.seeking,
+    readyState: v.readyState,
+    playhead: store.playhead,
+    message: document.querySelector('.preview-message').hidden ? null : document.querySelector('.preview-message').textContent,
+    videoVisible: v.style.visibility !== 'hidden',
+    tc: document.querySelector('#timecode').textContent,
+    clips: document.querySelectorAll('.clip').length,
+  };
+});
+await page.click('.media-card:nth-child(2)'); // vertical_360x640.mp4
+await page.waitForTimeout(300);
+console.log('source opened', JSON.stringify(await sourceState()));
+await page.keyboard.press('Space');
+await page.waitForTimeout(1000);
+await page.keyboard.press('Space');
+console.log('source after 1 s play', JSON.stringify(await sourceState()));
+const bar = await page.locator('.source-bar').boundingBox();
+await page.mouse.click(bar.x + bar.width * 0.5, bar.y + bar.height / 2);
+await page.waitForTimeout(300);
+console.log('source scrubbed to 50%', JSON.stringify(await sourceState()));
+await ss('03a-source');
+await page.click('.media-card:nth-child(5)'); // tone.mp3
+await page.keyboard.press('Space');
+await page.waitForTimeout(700);
+await page.keyboard.press('Space');
+console.log('audio source', JSON.stringify(await sourceState()));
+await page.keyboard.press('Escape');
+console.log('after Esc', JSON.stringify(await sourceState()));
+
 // Put three clips on the timeline, then fit
 for (const i of [0, 1, 2]) await page.dblclick(`.media-card:nth-child(${i + 1})`);
 await page.click('[data-command=zoomFit]');

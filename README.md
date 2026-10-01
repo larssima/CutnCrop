@@ -85,6 +85,7 @@ linked, unlinked and moved audio against the flashes, the mix level, fades and m
 
 | Key | Action |
 |---|---|
+| Click a media file | Preview it on its own (source monitor); Esc returns to the timeline |
 | Space / K | Play / pause |
 | ← / → | Previous / next frame (Shift: 1 second) |
 | Home / End | Go to start / end |

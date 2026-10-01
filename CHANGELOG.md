@@ -3,6 +3,12 @@
 All notable changes to CutnCrop. Versions follow [semantic versioning](https://semver.org):
 MAJOR for incompatible project-file or behavior changes, MINOR for new features, PATCH for fixes.
 
+## Unreleased
+
+- Source monitor: click a file in the Media panel to watch and scrub it in the preview
+  without adding it to the timeline (Esc or "Back to timeline" returns).
+- Fix: scrubbing right after pausing could leave the previous frame on screen.
+
 ## 0.1.0 — 2026-09-29
 
 First release.

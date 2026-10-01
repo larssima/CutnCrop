@@ -32,12 +32,18 @@
 
     <section id="preview" class="panel">
       <div class="preview-area">
+        <div class="source-badge" hidden>
+          <span class="source-label">SOURCE</span>
+          <span class="source-name"></span>
+          <button class="source-close" title="Back to the timeline (Esc)">Back to timeline</button>
+        </div>
         <div class="preview-frame">
           <video preload="auto" playsinline></video>
           <div class="text-overlay"></div>
           <div class="preview-message" hidden></div>
         </div>
       </div>
+      <div class="source-bar" hidden title="Click or drag to scrub"><div class="source-fill"></div></div>
       <div class="transport">
         <span id="timecode" class="timecode">00:00:00:00</span>
         <div class="transport-buttons">
