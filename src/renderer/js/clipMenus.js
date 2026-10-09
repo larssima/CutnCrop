@@ -3,7 +3,9 @@
 
 import { store } from './store.js';
 import { showContextMenu } from './contextMenu.js';
+import { toast } from './util.js';
 import * as tl from '../../shared/timeline.js';
+import { effectsForTrack, hasEffect } from '../../shared/effects.js';
 
 /** Open the menu for { kind: 'clip' | 'text' | 'media' | 'gap', id | trackId+t } at (x, y). */
 export function showItemMenu(target, run) {
@@ -67,7 +69,9 @@ function clipItems(id, run) {
     !isVideo && { label: 'Fade in 1 s', action: () => fade({ fadeIn: 1 }) },
     !isVideo && { label: 'Fade out 1 s', action: () => fade({ fadeOut: 1 }) },
     !isVideo && { label: 'Remove fades', disabled: !hasFades, action: () => fade({ fadeIn: 0, fadeOut: 0 }) },
-    (clip.linkId || sound || !isVideo) && '-',
+    '-',
+    ...effectItems(clip, isVideo ? 'video' : 'audio'),
+    '-',
     { label: 'Go to clip start', action: () => store.setPlayhead(clip.start) },
     { label: 'Go to clip end', action: () => store.setPlayhead(end) },
     { label: 'Preview source file', action: () => previewSource(clip.mediaId, clip.in) },
@@ -78,6 +82,23 @@ function clipItems(id, run) {
       : { label: 'Delete', shortcut: 'Del', danger: true, action: () => deleteClip(id, undefined) },
     linkedVideo && { label: 'Delete video only', shortcut: 'Ctrl+click, Del', danger: true, action: () => deleteClip(id, false) },
     isVideo && { label: 'Ripple delete', shortcut: 'Shift+Del', danger: true, action: () => run('rippleDelete') },
+  ];
+}
+
+/** One checkable item per effect available for this kind of clip (from the effect registry). */
+function effectItems(clip, trackType) {
+  const effects = effectsForTrack(trackType);
+  if (!effects.length) return [];
+  return [
+    { heading: 'Effects' },
+    ...effects.map((fx) => ({
+      label: fx.linked && clip.linkId ? `${fx.label} (with linked ${trackType === 'video' ? 'sound' : 'video'})` : fx.label,
+      checked: hasEffect(clip, fx.type),
+      action: () => {
+        const on = store.edit((p) => tl.toggleEffect(p, clip.id, fx.type));
+        toast(`${fx.label} ${on ? 'on' : 'off'}`);
+      },
+    })),
   ];
 }
 

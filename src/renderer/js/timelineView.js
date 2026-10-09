@@ -7,6 +7,7 @@ import { store } from './store.js';
 import { h, $, mediaUrl } from './util.js';
 import { getPeaks, PEAKS_PER_SECOND } from './media.js';
 import * as tl from '../../shared/timeline.js';
+import { EFFECTS, isReversed } from '../../shared/effects.js';
 import { formatDuration } from '../../shared/time.js';
 
 const SNAP_PX = 8;
@@ -48,8 +49,10 @@ function drawWaveform(canvas, peaks, clip, zoom, { color, fades }) {
   ctx.fillStyle = color;
   for (let x = 0; x < width; x++) {
     const rel = x * secondsPerPx;
-    const from = Math.floor((clip.in + rel) * PEAKS_PER_SECOND);
-    const to = Math.max(from + 1, Math.floor((clip.in + rel + secondsPerPx) * PEAKS_PER_SECOND));
+    // Source span under this pixel; a reversed clip runs from `out` backwards.
+    const srcStart = isReversed(clip) ? clip.out - rel - secondsPerPx : clip.in + rel;
+    const from = Math.floor(srcStart * PEAKS_PER_SECOND);
+    const to = Math.max(from + 1, Math.floor((srcStart + secondsPerPx) * PEAKS_PER_SECOND));
     let peak = 0;
     for (let i = from; i < to && i < peaks.length; i++) if (peaks[i] > peak) peak = peaks[i];
     let amp = Math.sqrt(peak / 255) * Math.min(1, clip.volume);
@@ -215,7 +218,10 @@ export class TimelineView {
     const z = store.zoom;
     const cls = this.selectionClass(clip);
     const style = { left: `${this.x(clip.start)}px`, width: `${Math.max(2, this.x(tl.clipDuration(clip)))}px` };
-    const linkMark = clip.linkId ? h('span.link-mark', { title: 'Linked — moves with its partner. Unlink with D.' }, '🔗') : null;
+    const linkMark = [
+      clip.linkId ? h('span.link-mark', { title: 'Linked — moves with its partner. Unlink with D.' }, '🔗') : null,
+      ...(clip.effects ?? []).map((e) => EFFECTS[e.type] && h('span.effect-mark', { title: `Effect: ${EFFECTS[e.type].label}` }, EFFECTS[e.type].icon)),
+    ];
 
     if (track.type === 'video') {
       const thumbs = h('div.clip-thumbs');

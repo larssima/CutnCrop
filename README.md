@@ -81,6 +81,16 @@ linked, unlinked and moved audio against the flashes, the mix level, fades and m
 - Drag the round handles at the top corners of an audio clip to set fade in/out.
 - The speaker buttons in the track headers mute a whole track.
 
+## Effects
+
+Right-click a clip → **Effects** (or use the Effects checkboxes in the right-hand panel).
+Effects are defined in `src/shared/effects.js` and implemented in the exporter and preview.
+
+- **Reverse** — the clip plays from its end to its start. Linked video and sound are reversed
+  together. The export reverses long clips in chunks to keep memory bounded; the preview shows
+  the exact reversed frame while paused and plays a reversed file rendered in the background
+  (playback steps silently through frames until it is ready).
+
 ## Keyboard
 
 The full keyboard and mouse chart is in the app under **Help › Keyboard Shortcuts** (F1).

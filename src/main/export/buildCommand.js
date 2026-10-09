@@ -15,6 +15,7 @@
 import path from 'node:path';
 import { sortedClips, textTrack, findMedia, clipEnd, audioTracks, projectDuration, clipDuration } from '../../shared/timeline.js';
 import { fpsString, frameCount, framesToSeconds, samplesForFrames } from '../../shared/time.js';
+import { isReversed } from '../../shared/effects.js';
 
 const DEFAULT_FONT = process.platform === 'win32' ? 'C:/Windows/Fonts/arial.ttf' : null;
 
@@ -63,7 +64,7 @@ export function buildSegments(project) {
 /**
  * @param {object} project
  * @param {string} outPath
- * @param {object} opts  { tempDir, quality, fontFile }
+ * @param {object} opts  { tempDir, quality, fontFile, keyint, reverseChunkFrames }
  * @returns {{ args: string[], duration: number, textFiles: {path: string, content: string}[] }}
  */
 export function buildExportCommand(project, outPath, opts = {}) {
@@ -93,22 +94,44 @@ export function buildExportCommand(project, outPath, opts = {}) {
     `aformat=sample_fmts=fltp:channel_layouts=stereo,volume=${volume},` +
     `apad=whole_len=${samples},atrim=end_sample=${samples},asetpts=PTS-STARTPTS`;
 
+  /** Conform input i's video to the project format, exactly `frames` frames long. */
+  const normalizedVideo = (i, frames) =>
+    `[${i}:v:0]fps=fps=${R}:start_time=0,` +
+    `scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
+    `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p,` +
+    `tpad=stop_mode=clone:stop=${frames},trim=end_frame=${frames},setpts=PTS-STARTPTS`;
+
+  // `reverse` holds every frame in memory, so reversed clips are reversed in
+  // chunks of at most ~256 MB of raw frames, concatenated last chunk first.
+  const reverseChunkFrames = opts.reverseChunkFrames
+    ?? Math.max(1, Math.min(150, Math.floor((256 * 1024 * 1024) / (W * H * 1.5))));
+
   // ---- Video track ----
   segments.forEach((seg, k) => {
     const frames = seg.endF - seg.startF;
     const v = `v${k}`;
     if (seg.type === 'gap') {
       filters.push(`color=c=black:s=${W}x${H}:r=${R},format=yuv420p,setsar=1,trim=end_frame=${frames}[${v}]`);
+    } else if (isReversed(seg.clip)) {
+      // The segment shows the clip's forward frames 0..frames-1 (from `in`) backwards;
+      // any skipped timeline start corresponds to the source end, which isn't used.
+      const { clip } = seg;
+      const media = findMedia(project, clip.mediaId);
+      const chunks = [];
+      for (let first = 0; first < frames; first += reverseChunkFrames) {
+        const len = Math.min(reverseChunkFrames, frames - first);
+        const i = addInput(media, clip.in + framesToSeconds(first, fps), framesToSeconds(len, fps));
+        const label = `${v}r${chunks.length}`;
+        filters.push(`${normalizedVideo(i, len)},reverse,setpts=PTS-STARTPTS[${label}]`);
+        chunks.push(`[${label}]`);
+      }
+      if (chunks.length === 1) filters.push(`${chunks[0]}null[${v}]`);
+      else filters.push(`${chunks.reverse().join('')}concat=n=${chunks.length}:v=1:a=0[${v}]`);
     } else {
       const { clip } = seg;
       const media = findMedia(project, clip.mediaId);
       const i = addInput(media, clip.in + framesToSeconds(seg.skipF, fps), framesToSeconds(frames, fps));
-      filters.push(
-        `[${i}:v:0]fps=fps=${R}:start_time=0,` +
-          `scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
-          `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p,` +
-          `tpad=stop_mode=clone:stop=${frames},trim=end_frame=${frames},setpts=PTS-STARTPTS[${v}]`,
-      );
+      filters.push(`${normalizedVideo(i, frames)}[${v}]`);
     }
     concatInputs.push(`[${v}]`);
   });
@@ -132,6 +155,8 @@ export function buildExportCommand(project, outPath, opts = {}) {
       const i = addInput(media, clip.in, dur);
       const label = `t${mixInputs.length}`;
       let chain = normalizedAudio(i, media, clip.volume ?? 1, samples);
+      // Reverse before fades: fades belong to the clip's start/end on the timeline.
+      if (isReversed(clip)) chain += ',areverse,asetpts=PTS-STARTPTS';
       const fadeIn = Math.min(clip.fadeIn ?? 0, dur);
       const fadeOut = Math.min(clip.fadeOut ?? 0, clipDuration(clip));
       if (fadeIn > 0) chain += `,afade=t=in:st=0:d=${num(fadeIn)}`;
@@ -175,6 +200,8 @@ export function buildExportCommand(project, outPath, opts = {}) {
     '-map', `[${vLabel}]`,
     '-map', '[aout]',
     '-c:v', 'libx264', '-preset', quality.preset, '-crf', String(quality.crf),
+    // Short keyframe intervals for preview files that must seek fast.
+    ...(opts.keyint ? ['-g', String(opts.keyint), '-keyint_min', String(opts.keyint)] : []),
     '-pix_fmt', 'yuv420p', '-r', R,
     '-c:a', 'aac', '-b:a', '192k', '-ar', String(SR), '-ac', '2',
     // negative_cts_offsets: B-frame reordering is stored so the first frame sits at

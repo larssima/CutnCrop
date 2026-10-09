@@ -3,6 +3,7 @@
 import { store } from './store.js';
 import { h, $ } from './util.js';
 import * as tl from '../../shared/timeline.js';
+import { effectsForTrack, hasEffect, isReversed } from '../../shared/effects.js';
 import { formatTimecode, formatDuration } from '../../shared/time.js';
 
 const RESOLUTIONS = [
@@ -137,13 +138,32 @@ export class Inspector {
           ? '🔗 Linked to its video: moves, trims and splits with it.'
           : `🔗 Sound on ${tl.trackOfClip(p, audio.id).id.toUpperCase()}: moves, trims and splits with it.`)
       : null;
+    // Source in/out sit at the timeline's left/right edges, or the other way round
+    // when the clip is reversed; trim the matching edge.
+    const reversed = isReversed(clip);
+    const setSourceIn = (v) => store.edit((proj) => (reversed
+      ? tl.trimClip(proj, clip.id, 'out', clip.start + (clip.out - v))
+      : tl.trimClip(proj, clip.id, 'in', clip.start + (v - clip.in))));
+    const setSourceOut = (v) => store.edit((proj) => (reversed
+      ? tl.trimClip(proj, clip.id, 'in', clip.start + (clip.out - v))
+      : tl.trimClip(proj, clip.id, 'out', clip.start + (v - clip.in))));
+    const effectToggles = effectsForTrack(track.type).map((fx) =>
+      h('label.checkbox', { title: fx.description },
+        h('input', {
+          type: 'checkbox', checked: hasEffect(clip, fx.type),
+          onchange: () => store.edit((proj) => tl.toggleEffect(proj, clip.id, fx.type)),
+        }),
+        `${fx.icon} ${fx.label}`,
+        fx.linked && clip.linkId ? h('span.hint-inline', {}, isAudio ? ' (with its video)' : ' (with its sound)') : null));
+
     this.show(isAudio ? `Audio clip · ${track.id.toUpperCase()}` : 'Video clip',
       h('div.inspector-name', { title: media.path }, media.name),
       linkNote,
       ...audioControls,
+      effectToggles.length ? h('div.field', {}, h('span.field-label', {}, 'Effects'), ...effectToggles) : null,
       field('Start on timeline (s)', numberInput(clip.start, (v) => store.edit((proj) => tl.moveClip(proj, clip.id, v)))),
-      field('In point (s)', numberInput(clip.in, (v) => store.edit((proj) => tl.trimClip(proj, clip.id, 'in', clip.start + (v - clip.in))), { max: clip.out })),
-      field('Out point (s)', numberInput(clip.out, (v) => store.edit((proj) => tl.trimClip(proj, clip.id, 'out', clip.start + (v - clip.in))), { max: media.duration })),
+      field('In point (s)', numberInput(clip.in, setSourceIn, { max: clip.out })),
+      field('Out point (s)', numberInput(clip.out, setSourceOut, { max: media.duration })),
       h('div.info-grid', {},
         h('span', {}, 'Duration'), h('span', {}, formatTimecode(tl.clipDuration(clip), fps)),
         h('span', {}, 'Source'), h('span', {}, media.hasVideo ? `${media.width}×${media.height} @ ${media.fps}` : 'Audio file'),

@@ -9,9 +9,12 @@
 import { store } from './store.js';
 import { mediaUrl, h, $ } from './util.js';
 import { AudioTracksPlayer } from './audioPlayer.js';
+import { reversedFileFor } from './reversePreview.js';
 import {
   clipAt, clipEnd, findMedia, projectDuration, sortedClips, textTrack, fadeGain, trackOfClip, linkedAudioOf,
+  videoTrack, audioTracks, isLinkedToVideo,
 } from '../../shared/timeline.js';
+import { isReversed, sourceTimeAt } from '../../shared/effects.js';
 import { frameDuration } from '../../shared/time.js';
 
 export class Preview {
@@ -20,6 +23,8 @@ export class Preview {
     this.video = $('video', root);
     this.overlay = $('.text-overlay', root);
     this.message = $('.preview-message', root);
+    this.note = $('.preview-note', root);
+    this.clipMode = 'forward'; // 'forward' | 'reverse-file' | 'reverse-step' for the clip under the playhead
     this.sourceBadge = $('.source-badge', root);
     this.sourceBar = $('.source-bar', root);
     this.sourceFill = $('.source-fill', root);
@@ -39,8 +44,10 @@ export class Preview {
 
     store.on('project', () => {
       this.fitFrame();
+      this.prefetchReversed();
       this.sync();
     });
+    store.on('reverse-ready', () => this.sync());
     store.on('playhead', () => {
       if (!this.playing) this.sync();
     });
@@ -162,8 +169,11 @@ export class Preview {
       // Don't skip over the start of the next clip.
       const next = sortedClips(project).find((c) => c.start > store.playhead);
       if (next && t > next.start) t = next.start;
+    } else if (this.clipMode === 'reverse-step') {
+      t += dt; // reversed preview not ready: frames are stepped to the wall clock
     } else if (this.videoReady()) {
-      t = clip.start + (this.video.currentTime - clip.in);
+      // A reversed preview file starts at the clip start; a source file at `in`.
+      t = clip.start + (this.clipMode === 'reverse-file' ? this.video.currentTime : this.video.currentTime - clip.in);
       if (this.video.ended || t >= clipEnd(clip)) t = clipEnd(clip);
     } else if (!this.hasSource(clip)) {
       t += dt; // no preview available yet: keep time moving
@@ -208,6 +218,8 @@ export class Preview {
     if (!clip) {
       this.video.style.visibility = 'hidden';
       this.showMessage(null);
+      this.showNote(null);
+      this.clipMode = 'forward';
       if (!this.video.paused) this.video.pause();
       return;
     }
@@ -222,20 +234,41 @@ export class Preview {
     this.showMessage(null);
     this.video.style.visibility = 'visible';
 
-    const target = clip.in + (t - clip.start);
-    if (this.currentSrc !== src) {
-      this.currentSrc = src;
-      this.video.src = mediaUrl(src);
-      this.video.currentTime = target;
-    }
-
     // A linked audio clip has the same timing and file as the video, so the
     // video element plays it directly (exact lip sync); unlinked audio plays
     // through the audio-track player instead.
     const linked = linkedAudioOf(project, clip);
     const linkedTrack = linked && trackOfClip(project, linked.id);
-    this.video.volume = linked ? Math.min(1, linked.volume * fadeGain(linked, t - linked.start)) : 0;
-    if (this.playing) {
+
+    // Which file and position: forward clips play their source. Reversed clips
+    // play a pre-rendered reversed file; until it exists (and always while
+    // paused, which is instant and exact) the right frame is shown by seeking
+    // the source backwards.
+    const rel = t - clip.start;
+    let file = src;
+    let target = clip.in + rel;
+    this.clipMode = 'forward';
+    if (isReversed(clip)) {
+      const reversedFile = reversedFileFor(clip, { video: true, audio: Boolean(linked && isReversed(linked)) });
+      if (this.playing && reversedFile) {
+        file = reversedFile;
+        target = rel;
+        this.clipMode = 'reverse-file';
+      } else {
+        target = Math.max(clip.in, sourceTimeAt(clip, rel) - 0.5 * frameDuration(project.settings.fps));
+        this.clipMode = 'reverse-step';
+      }
+    }
+    this.showNote(this.playing && this.clipMode === 'reverse-step' ? 'Preparing reversed preview… (silent until ready)' : null);
+
+    if (this.currentSrc !== file) {
+      this.currentSrc = file;
+      this.video.src = mediaUrl(file);
+      this.video.currentTime = target;
+    }
+
+    this.video.volume = linked ? Math.min(1, linked.volume * fadeGain(linked, rel)) : 0;
+    if (this.playing && this.clipMode !== 'reverse-step') {
       this.video.muted = !linked || linked.muted || linkedTrack.muted;
       if (this.video.paused) {
         this.seek(target);
@@ -255,6 +288,8 @@ export class Preview {
     const media = this.sourceMedia();
     if (!media) return store.closeSource();
     this.overlay.replaceChildren(); // timeline text doesn't belong on a source file
+    this.showNote(null);
+    this.clipMode = 'forward';
     this.lastTextKey = null;
     this.audio.stopAll();
 
@@ -312,6 +347,27 @@ export class Preview {
   showMessage(text) {
     this.message.textContent = text ?? '';
     this.message.hidden = !text;
+  }
+
+  /** Small corner note that doesn't hide the picture. */
+  showNote(text) {
+    this.note.textContent = text ?? '';
+    this.note.hidden = !text;
+  }
+
+  /** Start rendering reversed previews for every reversed clip, so they're ready by play time. */
+  prefetchReversed() {
+    const project = store.project;
+    for (const clip of videoTrack(project).clips) {
+      if (!isReversed(clip)) continue;
+      const linked = linkedAudioOf(project, clip);
+      reversedFileFor(clip, { video: true, audio: Boolean(linked && isReversed(linked)) });
+    }
+    for (const track of audioTracks(project)) {
+      for (const clip of track.clips) {
+        if (isReversed(clip) && !isLinkedToVideo(project, clip)) reversedFileFor(clip, { video: false, audio: true });
+      }
+    }
   }
 
   /** Text overlays mirror the export's drawtext placement: centered at (x, y). */

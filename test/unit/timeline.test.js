@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createProject, validateProject, migrateProject } from '../../src/shared/schema.js';
+import { createProject, validateProject, migrateProject, SCHEMA_VERSION } from '../../src/shared/schema.js';
+import { isReversed, sourceTimeAt } from '../../src/shared/effects.js';
 import * as tl from '../../src/shared/timeline.js';
 import { fpsRational, frameCount, samplesForFrames, snapToFrame, formatTimecode } from '../../src/shared/time.js';
 
@@ -108,7 +109,8 @@ test('migrate v1 moves clip sound to a linked audio clip and rejects newer versi
     media: [{ id: 'm1', path: 'a.mp4', duration: 5, fps: 25, hasAudio: true }],
     tracks: [{ id: 'v1', type: 'video', clips: [{ id: 'c1', mediaId: 'm1', start: 0, in: 0, out: 5, volume: 0.5 }] }],
   });
-  assert.equal(p.version, 3);
+  assert.equal(p.version, SCHEMA_VERSION);
+  assert.deepEqual(tl.findClip(p, 'c1').effects, []);
   assert.equal(p.settings.width, 1920);
   assert.ok(tl.textTrack(p));
   assert.equal(p.media[0].hasVideo, true);
@@ -322,6 +324,56 @@ test('close gap pulls everything after it left, with linked sound', () => {
   const [cSound] = tl.linkedPartners(p, c);
   assert.deepEqual([b.start, c.start, cSound.start], [10, 26, 26]);
   assert.deepEqual(validateProject(p), []);
+});
+
+test('reverse applies to a linked pair, maps time backwards and toggles off', () => {
+  const p = projectWithAudio();
+  const v = tl.addClip(p, 'm1', 0);
+  tl.trimClip(p, v.id, 'in', 2); // start 2, source 2..10
+  const [a] = tl.linkedPartners(p, v);
+  assert.equal(tl.toggleEffect(p, a.id, 'reverse'), true);
+  assert.ok(isReversed(v) && isReversed(a), 'reversing the sound reverses its video too');
+  assert.equal(sourceTimeAt(v, 0), 10, 'first frame on the timeline is the source out point');
+  assert.equal(sourceTimeAt(v, 8), 2);
+  assert.deepEqual(validateProject(p), []);
+  assert.equal(tl.toggleEffect(p, v.id, 'reverse'), false);
+  assert.ok(!isReversed(v) && !isReversed(a));
+  assert.throws(() => tl.toggleEffect(p, v.id, 'nope'));
+});
+
+test('splitting a reversed clip keeps the backwards order across both halves', () => {
+  const p = projectWithAudio();
+  const v = tl.addClip(p, 'm1', 0); // source 0..10
+  tl.toggleEffect(p, v.id, 'reverse');
+  const right = tl.splitClip(p, v.id, 3);
+  // Left (timeline 0..3) shows source 10 -> 7; right (3..10) shows 7 -> 0.
+  assert.deepEqual([v.in, v.out], [7, 10]);
+  assert.deepEqual([right.start, right.in, right.out], [3, 0, 7]);
+  assert.ok(isReversed(right));
+  assert.notEqual(right.effects, v.effects, 'effects are copied, not shared');
+  const [rightSound] = tl.linkedPartners(p, right);
+  assert.deepEqual([rightSound.in, rightSound.out], [0, 7]);
+  assert.deepEqual(validateProject(p), []);
+});
+
+test('trimming a reversed clip: left edge trims the source end, right edge the source start', () => {
+  const p = projectWithAudio();
+  const v = tl.addClip(p, 'm1', 0); // source 0..10
+  tl.toggleEffect(p, v.id, 'reverse');
+  tl.trimClip(p, v.id, 'in', 2); // drop the first 2 s of backwards playback = source 8..10
+  assert.deepEqual([v.start, v.in, v.out], [2, 0, 8]);
+  tl.trimClip(p, v.id, 'out', 7); // keep 5 s: source 3..8
+  assert.deepEqual([v.start, v.in, v.out], [2, 3, 8]);
+  tl.trimClip(p, v.id, 'in', 0); // extend left again: back up to source end 10
+  assert.deepEqual([v.start, v.in, v.out], [0, 3, 10]);
+  tl.trimClip(p, v.id, 'out', 50); // can't go before source start
+  assert.deepEqual([v.in, v.out], [0, 10]);
+  const [a] = tl.linkedPartners(p, v);
+  assert.deepEqual([a.start, a.in, a.out], [v.start, v.in, v.out]);
+
+  const copy = tl.duplicateClip(p, v.id);
+  assert.ok(isReversed(copy));
+  assert.notEqual(copy.effects, v.effects);
 });
 
 test('ripple delete shifts every track after the hole', () => {

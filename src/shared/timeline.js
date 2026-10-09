@@ -8,6 +8,7 @@
 // move, trim, split and delete together until they are unlinked.
 
 import { newId, DEFAULT_TEXT_STYLE } from './schema.js';
+import { EFFECTS, hasEffect, isReversed, sourceTimeAt, cloneEffects } from './effects.js';
 import { snapToFrame, floorToFrame, frameDuration, round6 } from './time.js';
 
 export const videoTrack = (project) => project.tracks.find((t) => t.type === 'video');
@@ -175,7 +176,26 @@ export function audioTrackWithRoom(project, start, end) {
 }
 
 function newAudioClip(fields) {
-  return { volume: 1, muted: false, fadeIn: 0, fadeOut: 0, ...fields, id: newId('c') };
+  return { volume: 1, muted: false, fadeIn: 0, fadeOut: 0, effects: [], ...fields, id: newId('c') };
+}
+
+/**
+ * Turn an effect on or off for a clip. Effects marked `linked` in the registry
+ * apply to the clip's linked partners too, so picture and sound stay matched.
+ * Returns whether the effect is now on.
+ */
+export function toggleEffect(project, clipId, type) {
+  const clip = findClip(project, clipId);
+  const def = EFFECTS[type];
+  if (!clip || !def) throw new Error(`Unknown effect ${type}`);
+  const on = !hasEffect(clip, type);
+  const targets = def.linked ? linkGroup(project, clip) : [clip];
+  for (const c of targets) {
+    if (!def.tracks.includes(trackOfClip(project, c.id).type)) continue;
+    c.effects = (c.effects ?? []).filter((e) => e.type !== type);
+    if (on) c.effects.push({ type });
+  }
+  return on;
 }
 
 /**
@@ -214,7 +234,7 @@ export function addClip(project, mediaId, start = null, trackId = null) {
     return clip;
   }
 
-  const clip = { ...timing, id: newId('c') };
+  const clip = { ...timing, effects: [], id: newId('c') };
   track.clips.push(clip);
   // Settle the video clip first, so its sound goes where there is room at its final position.
   resolveOverlaps(project, [clip.id]);
@@ -246,29 +266,33 @@ export function moveClip(project, clipId, newStart, targetTrackId = null) {
 }
 
 /**
- * Trim a clip edge (and its linked clips) to timeline time t. The 'in' edge
- * keeps the source content anchored (moves start and in together); the 'out'
- * edge changes only out.
+ * Trim a clip edge (and its linked clips) to timeline time t. 'in' is the
+ * left edge on the timeline, 'out' the right edge; the content under the other
+ * edge stays where it is. On a reversed clip the left edge shows the source's
+ * out point, so trimming it changes `out` instead of `in` (and vice versa).
  */
 export function trimClip(project, clipId, edge, t) {
   const clip = findClip(project, clipId);
   const media = findMedia(project, clip.mediaId);
   const fps = project.settings.fps;
   const minDur = frameDuration(fps);
+  const maxOut = floorToFrame(media.duration, fps) || media.duration;
+  const reversed = isReversed(clip);
+  const dur = clip.out - clip.in;
   t = snapToFrame(t, fps);
 
   if (edge === 'in') {
-    let newIn = clip.in + (t - clip.start);
-    newIn = Math.min(Math.max(newIn, 0), clip.out - minDur);
-    // Can't start before timeline zero.
-    newIn = Math.max(newIn, clip.in - clip.start);
-    clip.start = round6(clip.start + (newIn - clip.in));
-    clip.in = round6(newIn);
+    // How far the left edge moves right (negative = extend to the left).
+    const minDelta = Math.max(-clip.start, reversed ? clip.out - maxOut : -clip.in);
+    const delta = Math.min(Math.max(t - clip.start, minDelta), dur - minDur);
+    clip.start = round6(clip.start + delta);
+    if (reversed) clip.out = round6(clip.out - delta);
+    else clip.in = round6(clip.in + delta);
   } else {
-    let newOut = clip.in + (t - clip.start);
-    newOut = Math.max(newOut, clip.in + minDur);
-    newOut = Math.min(newOut, floorToFrame(media.duration, fps) || media.duration);
-    clip.out = round6(newOut);
+    const maxDur = reversed ? clip.out : maxOut - clip.in;
+    const newDur = Math.min(Math.max(t - clip.start, minDur), maxDur);
+    if (reversed) clip.in = round6(clip.out - newDur);
+    else clip.out = round6(clip.in + newDur);
   }
   const group = linkGroup(project, clip);
   for (const c of group) {
@@ -290,10 +314,17 @@ export function splitClip(project, clipId, t) {
   const newLink = clip.linkId ? newId('l') : undefined;
   let result = null;
   for (const c of group) {
-    const splitSource = round6(c.in + (t - c.start));
-    const right = { ...c, id: newId('c'), start: t, in: splitSource };
+    const splitSource = round6(sourceTimeAt(c, t - c.start));
+    const right = { ...c, id: newId('c'), start: t, effects: cloneEffects(c.effects) };
     if (newLink) right.linkId = newLink;
-    c.out = splitSource;
+    if (isReversed(c)) {
+      // Left part shows source [split, out), right part [in, split) — both backwards.
+      right.out = splitSource;
+      c.in = splitSource;
+    } else {
+      right.in = splitSource;
+      c.out = splitSource;
+    }
     // The fade-in stays with the left part, the fade-out moves to the right part.
     if ('fadeIn' in c) {
       c.fadeOut = 0;
@@ -439,7 +470,7 @@ export function duplicateClip(project, clipId) {
   const start = clipEnd(clip);
   let result = null;
   for (const c of group) {
-    const copy = { ...c, id: newId('c'), start };
+    const copy = { ...c, id: newId('c'), start, effects: cloneEffects(c.effects) };
     if (newLink) copy.linkId = newLink;
     trackOfClip(project, c.id).clips.push(copy);
     if (c === clip) result = copy;

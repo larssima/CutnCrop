@@ -64,7 +64,7 @@ export const SHORTCUTS = [
       ['Drag sound clip up/down', 'Move it to another audio lane'],
       ['Drag round handles on sound clip', 'Fade in / fade out'],
       ['Click / drag the ruler', 'Move the playhead / scrub'],
-      ['Right-click clip, text or media file', 'Menu with everything you can do with it'],
+      ['Right-click clip, text or media file', 'Menu with everything you can do with it, including effects (e.g. Reverse)'],
       ['Right-click a gap between clips', 'Close gap (pulls the following clips left)'],
     ],
   },

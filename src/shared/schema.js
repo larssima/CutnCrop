@@ -1,7 +1,9 @@
 // Project schema (see docs/project-schema.md). The project JSON is the single
 // source of truth: the UI, the preview and the exporter all read from it.
 
-export const SCHEMA_VERSION = 3;
+import { EFFECTS } from './effects.js';
+
+export const SCHEMA_VERSION = 4;
 
 export const DEFAULT_SETTINGS = Object.freeze({
   width: 1920,
@@ -101,6 +103,8 @@ export function migrateProject(project) {
     }
   }
   if ((project.version ?? 1) < 3) migrateLinkedAudio(p);
+  // v3 -> v4: clip effects.
+  for (const track of p.tracks) for (const clip of track.clips ?? []) clip.effects ??= [];
   p.version = SCHEMA_VERSION;
   return p;
 }
@@ -168,6 +172,10 @@ export function validateProject(project) {
         if (c.fadeIn < 0 || c.fadeOut < 0 || c.fadeIn + c.fadeOut > c.out - c.in + 1e-6) {
           errors.push(`Clip ${c.id} has invalid fades`);
         }
+      }
+      for (const e of c.effects ?? []) {
+        if (!EFFECTS[e.type]) errors.push(`Clip ${c.id} has unknown effect "${e.type}"`);
+        else if (!EFFECTS[e.type].tracks.includes(track.type)) errors.push(`Effect "${e.type}" can't be used on a ${track.type} clip`);
       }
       if (c.linkId) {
         const group = links.get(c.linkId) ?? [];

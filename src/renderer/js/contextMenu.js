@@ -1,5 +1,6 @@
 // Small popup menu. showContextMenu(x, y, items) where each item is
-//   { label, shortcut?, action, disabled?, danger? }  or  '-' for a separator.
+//   { label, shortcut?, action, disabled?, danger?, checked? },
+//   { heading: 'Section title' }, or '-' for a separator.
 // Closes on choosing an item, clicking elsewhere, Esc, scrolling or resizing.
 
 import { h } from './util.js';
@@ -19,18 +20,26 @@ export function isContextMenuOpen() {
 
 export function showContextMenu(x, y, items) {
   closeContextMenu();
-  const entries = items.filter(Boolean);
+  // Drop missing items and any separator that would be doubled, leading or trailing.
+  const entries = items
+    .filter(Boolean)
+    .filter((item, i, list) => item !== '-' || (i > 0 && i < list.length - 1 && list[i + 1] !== '-'));
   const el = h('div.context-menu', { role: 'menu' },
     ...entries.map((item) => {
       if (item === '-') return h('div.context-sep', { role: 'separator' });
-      return h(`button.context-item${item.danger ? '.danger' : ''}`, {
-        role: 'menuitem',
+      if (item.heading) return h('div.context-heading', {}, item.heading);
+      const checkable = item.checked !== undefined;
+      return h(`button.context-item${item.danger ? '.danger' : ''}${item.checked ? '.checked' : ''}`, {
+        role: checkable ? 'menuitemcheckbox' : 'menuitem',
+        'aria-checked': checkable ? String(item.checked) : undefined,
         disabled: Boolean(item.disabled),
         onclick: () => {
           closeContextMenu();
           item.action();
         },
-      }, h('span.context-label', {}, item.label), item.shortcut ? h('span.context-shortcut', {}, item.shortcut) : null);
+      },
+        h('span.context-label', {}, checkable ? h('span.context-check', {}, item.checked ? '✓' : '') : null, item.label),
+        item.shortcut ? h('span.context-shortcut', {}, item.shortcut) : null);
     }),
   );
   document.body.append(el);

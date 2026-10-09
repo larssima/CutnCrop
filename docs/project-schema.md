@@ -1,4 +1,4 @@
-# Project file schema (v3)
+# Project file schema (v4)
 
 A project is saved as JSON with the `.cutncrop` extension. It is the single
 source of truth: the UI, the preview and the exporter all read from it.
@@ -6,7 +6,7 @@ Code: `src/shared/schema.js` (creation, validation, migration).
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "settings": { "width": 1920, "height": 1080, "fps": 30, "sampleRate": 48000 },
   "media": [
     {
@@ -20,13 +20,14 @@ Code: `src/shared/schema.js` (creation, validation, migration).
   ],
   "tracks": [
     { "id": "v1", "type": "video",
-      "clips": [ { "id": "c1", "mediaId": "m1", "start": 0.0, "in": 2.0, "out": 8.0, "linkId": "l1" } ] },
+      "clips": [ { "id": "c1", "mediaId": "m1", "start": 0.0, "in": 2.0, "out": 8.0, "linkId": "l1",
+                   "effects": [ { "type": "reverse" } ] } ] },
     { "id": "a1", "type": "audio", "muted": false,
       "clips": [ { "id": "c2", "mediaId": "m1", "start": 0.0, "in": 2.0, "out": 8.0, "linkId": "l1",
-                   "volume": 1.0, "muted": false, "fadeIn": 0, "fadeOut": 0 } ] },
+                   "volume": 1.0, "muted": false, "fadeIn": 0, "fadeOut": 0, "effects": [ { "type": "reverse" } ] } ] },
     { "id": "a2", "type": "audio", "muted": false,
       "clips": [ { "id": "c3", "mediaId": "m2", "start": 0.0, "in": 0.0, "out": 30.0,
-                   "volume": 0.8, "muted": false, "fadeIn": 1.0, "fadeOut": 2.0 } ] },
+                   "volume": 0.8, "muted": false, "fadeIn": 1.0, "fadeOut": 2.0, "effects": [] } ] },
     { "id": "t1", "type": "text",
       "items": [ { "id": "x…", "text": "Hello", "start": 1.0, "end": 4.0,
                    "x": 0.5, "y": 0.9, "size": 64, "color": "#ffffff" } ] }
@@ -64,6 +65,13 @@ Code: `src/shared/schema.js` (creation, validation, migration).
 | `clip.volume` | Audio clips: linear gain, 0–4 (1 = unchanged). The preview caps at 1. |
 | `clip.muted` | Audio clips: silenced in preview and export. |
 | `clip.fadeIn/fadeOut` | Audio clips: linear fade lengths in seconds; `fadeIn + fadeOut` ≤ clip length. |
+| `clip.effects` | Ordered list of effects, `{ type, ...params }`. Types are registered in `src/shared/effects.js`. |
+
+## Effects
+
+| Type | Tracks | Meaning |
+|---|---|---|
+| `reverse` | video, audio | The clip plays from `out` back to `in`: at clip-relative time `r` it shows source time `out − r`. `in`/`out` keep meaning the source range, so on the timeline the left edge shows `out` and the right edge `in`. Toggled together on linked clips. |
 | `text.start/end` | Timeline interval in seconds. |
 | `text.x/y` | Center of the text as a fraction of the frame (0–1). |
 | `text.size` | Font size in output pixels (relative to `settings.height`). |
@@ -81,6 +89,7 @@ Bump `SCHEMA_VERSION` for incompatible changes and add a step to
 `migrateProject()`. Files from a newer version are refused rather than
 misread. Update this document and `PROJECT_BRIEF.md` with every change.
 
+- **v4**: clip `effects` (first effect: `reverse`). Older files get `effects: []` on every clip.
 - **v3**: a video clip's sound is a linked audio clip (`linkId`) instead of part of the video clip.
   Video clips lose `volume`/`audioMuted`, the video track loses `muted`, audio clips gain `muted`.
   On open, each v2 video clip with sound gets a linked audio clip (keeping its volume and mute).

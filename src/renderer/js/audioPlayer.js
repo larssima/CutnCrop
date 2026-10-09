@@ -7,6 +7,8 @@
 import { store } from './store.js';
 import { mediaUrl } from './util.js';
 import * as tl from '../../shared/timeline.js';
+import { isReversed } from '../../shared/effects.js';
+import { reversedFileFor } from './reversePreview.js';
 
 const PRELOAD_AHEAD = 2; // seconds: get upcoming clips loaded and seeked
 // Drift handling: small drift (startup latency, clock differences) is pulled in
@@ -62,20 +64,24 @@ export class AudioTracksPlayer {
         const upcoming = clip.start > t && clip.start - t <= PRELOAD_AHEAD;
         if (!(current || upcoming) || (!playing && !upcoming && !current)) continue;
         const media = tl.findMedia(project, clip.mediaId);
-        const src = media && this.sourceFor(media);
+        // A reversed clip plays its pre-rendered reversed file (which starts at the
+        // clip start); it stays silent until that file exists.
+        const reversed = isReversed(clip);
+        const src = reversed ? reversedFileFor(clip, { video: false, audio: true }) : media && this.sourceFor(media);
         if (!src) continue;
+        const offset = reversed ? 0 : clip.in; // file time at the clip's start
         keep.add(clip.id);
         const { el } = this.entryFor(clip.id, src);
 
         if (!current || !playing || track.muted || clip.muted) {
           // Park it at its start point, ready to go.
           if (!el.paused) el.pause();
-          const parkAt = current ? clip.in + (t - clip.start) : clip.in;
+          const parkAt = offset + (current ? t - clip.start : 0);
           if (!el.seeking && Math.abs(el.currentTime - parkAt) > MAX_DRIFT) el.currentTime = parkAt;
           continue;
         }
         const rel = t - clip.start;
-        const target = clip.in + rel;
+        const target = offset + rel;
         el.volume = Math.min(1, clip.volume * tl.fadeGain(clip, rel));
         if (el.paused) {
           if (Math.abs(el.currentTime - target) > 0.02) el.currentTime = target;

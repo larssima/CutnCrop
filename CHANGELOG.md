@@ -3,6 +3,14 @@
 All notable changes to CutnCrop. Versions follow [semantic versioning](https://semver.org):
 MAJOR for incompatible project-file or behavior changes, MINOR for new features, PATCH for fixes.
 
+## Unreleased
+
+- Effects, starting with **Reverse**: right-click a clip → Effects → Reverse (or the
+  Effects checkboxes in the right-hand panel). Linked video and sound are reversed together.
+  Export reverses in memory-bounded chunks; the preview shows exact reversed frames while
+  paused and plays a background-rendered reversed file.
+- Project files are now schema v4 (`effects` on clips); older projects upgrade on open.
+
 ## 0.2.0 — 2026-10-01
 
 - Source monitor: click a file in the Media panel to watch and scrub it in the preview

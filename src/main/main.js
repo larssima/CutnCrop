@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { probe } from './ffmpeg/probe.js';
 import { ffmpegPaths } from './ffmpeg/paths.js';
 import { MediaPreparer } from './media/proxy.js';
+import { ReversePreviews } from './media/reversePreview.js';
 import { startExport } from './export/export.js';
 import { migrateProject } from '../shared/schema.js';
 
@@ -20,6 +21,7 @@ let win = null;
 let dirty = false;
 let exportJob = null;
 let preparer = null;
+let reversePreviews = null;
 
 // Only files the app has probed or produced may be served to the renderer.
 const servable = new Set();
@@ -291,6 +293,13 @@ function registerIpc() {
   });
 
   ipcMain.handle('export:cancel', () => exportJob?.cancel());
+
+  ipcMain.handle('preview:reverse', async (_e, req) => {
+    if (!servable.has(path.resolve(req.source).toLowerCase())) throw new Error('Unknown source file');
+    const file = await reversePreviews.get(req);
+    allow(file);
+    return file;
+  });
   ipcMain.on('app:version', (e) => (e.returnValue = app.getVersion()));
   ipcMain.on('app:dirty', (_e, value) => (dirty = Boolean(value)));
   ipcMain.on('app:title', (_e, title) => win?.setTitle(title));
@@ -299,6 +308,7 @@ function registerIpc() {
 
 app.whenReady().then(() => {
   protocol.handle('media', serveMedia);
+  reversePreviews = new ReversePreviews(path.join(app.getPath('userData'), 'cache'));
   preparer = new MediaPreparer(path.join(app.getPath('userData'), 'cache'), (id, patch) => {
     allow(patch.thumbPath);
     allow(patch.peaksPath);

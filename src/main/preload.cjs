@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('api', {
   probe: (paths) => ipcRenderer.invoke('media:probe', paths),
   prepareMedia: (media) => ipcRenderer.invoke('media:prepare', media),
   onMediaUpdate: (cb) => listen('media:update', cb),
+  reversePreview: (req) => ipcRenderer.invoke('preview:reverse', req),
 
   openProject: () => ipcRenderer.invoke('project:open'),
   saveProject: (args) => ipcRenderer.invoke('project:save', args),

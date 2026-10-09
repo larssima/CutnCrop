@@ -165,6 +165,57 @@ await page.keyboard.press('Control+z');
 await page.keyboard.press('Control+z'); // restore the deleted clip
 console.log('restored:', JSON.stringify(await videoStarts()));
 
+// Effects: reverse the vertical clip (timeline 5..9, source 0..4) from its menu.
+await page.click('.lane.video .clip:nth-child(3)', { button: 'right', position: { x: 30, y: 20 } });
+console.log('effects in menu:', JSON.stringify(await page.evaluate(() => ({
+  heading: document.querySelector('.context-heading')?.textContent,
+  items: [...document.querySelectorAll('.context-item[role=menuitemcheckbox]')].map((b) => `${b.textContent} checked=${b.getAttribute('aria-checked')}`),
+}))));
+await page.click('.context-item:has-text("Reverse")');
+const reverseState = () => page.evaluate(() => {
+  const { store, preview } = window.cutncrop;
+  const all = store.project.tracks.flatMap((t) => t.clips ?? []);
+  const v = document.querySelector('video');
+  return {
+    reversed: all.filter((c) => c.effects?.some((e) => e.type === 'reverse')).map((c) => `${c.start}..${+(c.start + c.out - c.in).toFixed(2)}`),
+    marks: document.querySelectorAll('.effect-mark').length,
+    mode: preview.clipMode,
+    src: v.currentSrc.includes('reverse-') ? 'reversed file' : 'source',
+    videoTime: +v.currentTime.toFixed(3),
+    note: document.querySelector('.preview-note').hidden ? null : document.querySelector('.preview-note').textContent,
+  };
+});
+console.log('after Reverse:', JSON.stringify(await reverseState()));
+await page.evaluate(() => window.cutncrop.store.setPlayhead(5.5)); // 0.5 s into the reversed clip
+await page.waitForTimeout(400);
+console.log('paused at 5.5 (expect source ≈ 3.483):', JSON.stringify(await reverseState()));
+await ss('04c-reversed');
+const fileReady = await page.waitForFunction(() => {
+  const m = window.cutncrop.store.project.media.find((x) => x.name === 'vertical_360x640.mp4');
+  return [...document.querySelectorAll('video')].length && m; // existence check only
+}).then(() => page.evaluate(async () => {
+  // Poll the preview until it can use the reversed file.
+  const { store, preview } = window.cutncrop;
+  for (let i = 0; i < 100; i++) {
+    preview.play();
+    await new Promise((r) => setTimeout(r, 100));
+    const mode = preview.clipMode;
+    preview.pause();
+    store.setPlayhead(5);
+    if (mode === 'reverse-file') return i * 0.1;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return null;
+}));
+console.log('reversed preview file ready after ~', fileReady, 's');
+await page.evaluate(() => window.cutncrop.store.setPlayhead(5));
+await page.keyboard.press('Space');
+await page.waitForTimeout(1000);
+console.log('playing reversed clip for 1 s:', JSON.stringify({ ...(await reverseState()), playhead: await page.evaluate(() => +window.cutncrop.store.playhead.toFixed(2)) }));
+await page.keyboard.press('Space');
+await page.keyboard.press('Control+z'); // reverse off again for the rest of the run
+console.log('after undo:', JSON.stringify((await reverseState()).reversed));
+
 // Audio: clip sound sits on A1, linked. Select only the first clip's sound and
 // delete it (the video must stay), drop music in its place, drag a 1 s fade-in.
 const linkedOnA1 = await page.evaluate(() => document.querySelectorAll('.lane[data-track-id=a1] .clip .link-mark').length);
