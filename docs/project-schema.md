@@ -93,6 +93,16 @@ Bump `SCHEMA_VERSION` for incompatible changes and add a step to
 `migrateProject()`. Files from a newer version are refused rather than
 misread. Update this document and `PROJECT_BRIEF.md` with every change.
 
+Backward compatibility is tested with real project files saved by each release
+(built with that release's own code) in `test/fixtures/projects/`; every one must
+keep opening, validating and exporting (`test/integration/compat.test.js`). Add a
+`saved-by-vX.Y.Z.cutncrop` fixture for every release that changes the format.
+
+| Release | Saves schema |
+|---|---|
+| 0.1.0, 0.2.0 | v3 |
+| 0.3.0 | v5 |
+
 - **v5**: still images (`media.isImage`, `settings.imageDuration`). Older files get `isImage: false`.
 - **v4**: clip `effects` (first effect: `reverse`). Older files get `effects: []` on every clip.
 - **v3**: a video clip's sound is a linked audio clip (`linkId`) instead of part of the video clip.

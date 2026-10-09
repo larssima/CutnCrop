@@ -1,0 +1,130 @@
+{
+  "version": 3,
+  "settings": {
+    "width": 320,
+    "height": 240,
+    "fps": 30,
+    "sampleRate": 48000
+  },
+  "media": [
+    {
+      "id": "mmv0wevuq1wjwk",
+      "path": "test-media/sync_30.mp4",
+      "name": "sync_30.mp4",
+      "duration": 8,
+      "hasVideo": true,
+      "hasAudio": true,
+      "audioChannels": 1,
+      "fps": 30,
+      "width": 320,
+      "height": 240,
+      "vfr": false,
+      "proxyPath": null,
+      "thumbPath": null,
+      "peaksPath": null
+    },
+    {
+      "id": "mmv0wevuq21w3o",
+      "path": "test-media/tone.mp3",
+      "name": "tone.mp3",
+      "duration": 6,
+      "hasVideo": false,
+      "hasAudio": true,
+      "audioChannels": 1,
+      "fps": null,
+      "width": 0,
+      "height": 0,
+      "vfr": false,
+      "proxyPath": null,
+      "thumbPath": null,
+      "peaksPath": null
+    }
+  ],
+  "tracks": [
+    {
+      "id": "v1",
+      "type": "video",
+      "clips": [
+        {
+          "mediaId": "mmv0wevuq1wjwk",
+          "start": 0,
+          "in": 0,
+          "out": 3,
+          "id": "cmv0wevuq3o8dl"
+        },
+        {
+          "mediaId": "mmv0wevuq1wjwk",
+          "start": 3,
+          "in": 0,
+          "out": 2,
+          "id": "cmv0wevur6s5wz",
+          "linkId": "lmv0wevur7jnk2"
+        }
+      ]
+    },
+    {
+      "id": "a1",
+      "type": "audio",
+      "muted": false,
+      "clips": [
+        {
+          "volume": 1,
+          "muted": false,
+          "fadeIn": 0,
+          "fadeOut": 0,
+          "mediaId": "mmv0wevuq1wjwk",
+          "start": 0,
+          "in": 0,
+          "out": 3,
+          "id": "cmv0wevuq5wxv1"
+        },
+        {
+          "volume": 1,
+          "muted": true,
+          "fadeIn": 0,
+          "fadeOut": 0,
+          "mediaId": "mmv0wevuq1wjwk",
+          "start": 3,
+          "in": 0,
+          "out": 2,
+          "linkId": "lmv0wevur7jnk2",
+          "id": "cmv0wevur8zov9"
+        }
+      ]
+    },
+    {
+      "id": "a2",
+      "type": "audio",
+      "muted": false,
+      "clips": [
+        {
+          "volume": 0.6,
+          "muted": false,
+          "fadeIn": 1,
+          "fadeOut": 0,
+          "mediaId": "mmv0wevuq21w3o",
+          "start": 0,
+          "in": 0,
+          "out": 6,
+          "id": "cmv0wevur90wxx"
+        }
+      ]
+    },
+    {
+      "id": "t1",
+      "type": "text",
+      "items": [
+        {
+          "id": "xmv0wevurar00h",
+          "text": "Made in 0.2.0",
+          "start": 1,
+          "end": 3,
+          "x": 0.5,
+          "y": 0.9,
+          "size": 14,
+          "color": "#ffffff"
+        }
+      ]
+    }
+  ]
+}

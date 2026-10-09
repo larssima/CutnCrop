@@ -1,0 +1,98 @@
+{
+  "version": 3,
+  "settings": {
+    "width": 320,
+    "height": 240,
+    "fps": 30,
+    "sampleRate": 48000
+  },
+  "media": [
+    {
+      "id": "mmv0wevn21jbci",
+      "path": "test-media/sync_30.mp4",
+      "name": "sync_30.mp4",
+      "duration": 8,
+      "hasVideo": true,
+      "hasAudio": true,
+      "audioChannels": 1,
+      "fps": 30,
+      "width": 320,
+      "height": 240,
+      "vfr": false,
+      "proxyPath": null,
+      "thumbPath": null,
+      "peaksPath": null
+    }
+  ],
+  "tracks": [
+    {
+      "id": "v1",
+      "type": "video",
+      "clips": [
+        {
+          "mediaId": "mmv0wevn21jbci",
+          "start": 0,
+          "in": 0,
+          "out": 1.5,
+          "id": "cmv0wevn22k6n0",
+          "linkId": "lmv0wevn23aoto"
+        },
+        {
+          "mediaId": "mmv0wevn21jbci",
+          "start": 1.5,
+          "in": 1.5,
+          "out": 4,
+          "id": "cmv0wevn36nexh",
+          "linkId": "lmv0wevn356fr9"
+        }
+      ]
+    },
+    {
+      "id": "a1",
+      "type": "audio",
+      "muted": false,
+      "clips": [
+        {
+          "volume": 1,
+          "muted": false,
+          "fadeIn": 0,
+          "fadeOut": 0,
+          "mediaId": "mmv0wevn21jbci",
+          "start": 0,
+          "in": 0,
+          "out": 1.5,
+          "linkId": "lmv0wevn23aoto",
+          "id": "cmv0wevn24v8s2"
+        },
+        {
+          "volume": 0.5,
+          "muted": false,
+          "fadeIn": 0,
+          "fadeOut": 0,
+          "mediaId": "mmv0wevn21jbci",
+          "start": 1.5,
+          "in": 1.5,
+          "out": 4,
+          "linkId": "lmv0wevn356fr9",
+          "id": "cmv0wevn37ez7w"
+        }
+      ]
+    },
+    {
+      "id": "t1",
+      "type": "text",
+      "items": [
+        {
+          "id": "xmv0wevn38u7nh",
+          "text": "Made in 0.1.0",
+          "start": 0.5,
+          "end": 2,
+          "x": 0.5,
+          "y": 0.9,
+          "size": 14,
+          "color": "#ffffff"
+        }
+      ]
+    }
+  ]
+}
