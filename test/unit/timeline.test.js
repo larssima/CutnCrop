@@ -376,6 +376,58 @@ test('trimming a reversed clip: left edge trims the source end, right edge the s
   assert.notEqual(copy.effects, v.effects);
 });
 
+test('copy + paste at the end, after a clip (insert) and into another project', () => {
+  const p = projectWithAudio();
+  const a = tl.addClip(p, 'm1', 0); // 0..10
+  const b = tl.addClip(p, 'm1', 10); // 10..20
+  tl.trimClip(p, b.id, 'out', 15); // b: 10..15
+  const song = tl.addClip(p, 'song', 15, tl.addAudioTrack(p).id); // A2: 15..35, after the cut
+  tl.toggleEffect(p, a.id, 'reverse');
+  const clip = tl.copyClip(p, a.id); // video + its sound
+  assert.equal(clip.clips.length, 2);
+
+  // At the end of the video track: nothing moves.
+  const atEnd = tl.pasteClips(p, clip, tl.trackEnd(tl.videoTrack(p)));
+  assert.equal(atEnd.start, 15);
+  const [atEndSound] = tl.linkedPartners(p, atEnd);
+  assert.ok(atEndSound, 'pasted video keeps a linked sound');
+  assert.notEqual(atEnd.linkId, a.linkId, 'a new link, not the original');
+  assert.ok(isReversed(atEnd) && isReversed(atEndSound), 'effects come along');
+  assert.equal(song.start, 15, 'no insert: the song stays');
+
+  // After clip a (insert): b, the clip at the end and the song all move right by 10.
+  const between = tl.pasteClips(p, clip, tl.clipEnd(a), { insert: true });
+  assert.equal(between.start, 10);
+  assert.deepEqual([b.start, atEnd.start, song.start], [20, 25, 25]);
+  assert.deepEqual(validateProject(p), []);
+
+  // Into a fresh project: the media comes along.
+  const other = createProject();
+  const pasted = tl.pasteClips(other, clip, 0);
+  assert.equal(other.media.length, 1);
+  assert.equal(pasted.mediaId, other.media[0].id);
+  assert.deepEqual(validateProject(other), []);
+});
+
+test('copying only the sound, text copy/paste, cut points', () => {
+  const p = projectWithAudio();
+  const v = tl.addClip(p, 'm1', 0);
+  const [s] = tl.linkedPartners(p, v);
+  const soundOnly = tl.copyClip(p, s.id);
+  assert.equal(soundOnly.clips.length, 1, 'a sound clip is copied alone');
+  const videoOnly = tl.copyClip(p, v.id, { withLinked: false });
+  assert.equal(videoOnly.clips.length, 1);
+  const pastedSound = tl.pasteClips(p, soundOnly, 12);
+  assert.equal(tl.trackOfClip(p, pastedSound.id).type, 'audio');
+  assert.equal(pastedSound.linkId, undefined);
+
+  const x = tl.addText(p, { start: 1, end: 3, text: 'Hi' });
+  const t2 = tl.pasteText(p, tl.copyText(p, x.id), 5);
+  assert.deepEqual([t2.start, t2.end, t2.text], [5, 7, 'Hi']);
+
+  assert.deepEqual(tl.cutPoints(p), [0, 10, 12, 22]);
+});
+
 test('ripple delete shifts every track after the hole', () => {
   const p = projectWithAudio();
   const v1 = tl.addClip(p, 'm1');

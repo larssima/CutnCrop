@@ -10,6 +10,13 @@ MAJOR for incompatible project-file or behavior changes, MINOR for new features,
   Export reverses in memory-bounded chunks; the preview shows exact reversed frames while
   paused and plays a background-rendered reversed file.
 - Project files are now schema v4 (`effects` on clips); older projects upgrade on open.
+- Copy, cut and paste (Ctrl+C / Ctrl+X / Ctrl+V): a video clip is copied with its sound.
+  Ctrl+V pastes right after the selected clip (later clips move to make room) or at the end
+  when nothing is selected; Ctrl+Shift+V pastes at the playhead (splitting a clip under it);
+  right-click empty lane space → Paste here. Pasting works across projects.
+- ↑ / ↓ jump the playhead to the previous / next cut between clips.
+- Dragging a media file onto a video clip shows an insertion line at the clip's nearer edge
+  and inserts it there; sound never pushes other clips (it goes to a lane with room).
 
 ## 0.2.0 — 2026-10-01
 

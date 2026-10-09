@@ -2,7 +2,7 @@
 
 import { store } from './store.js';
 import { h, $, mediaUrl, toast } from './util.js';
-import { MEDIA_DRAG_TYPE } from './timelineView.js';
+import { MEDIA_DRAG_TYPE, setDraggedMedia } from './timelineView.js';
 import { createMedia } from '../../shared/schema.js';
 import * as tl from '../../shared/timeline.js';
 import { formatDuration } from '../../shared/time.js';
@@ -132,7 +132,9 @@ export class MediaBin {
           ondragstart: (e) => {
             e.dataTransfer.setData(MEDIA_DRAG_TYPE, m.id);
             e.dataTransfer.effectAllowed = 'copy';
+            setDraggedMedia(m.id);
           },
+          ondragend: () => setDraggedMedia(null),
         },
           m.hasVideo
             ? h('div.media-thumb', { style: m.thumbPath ? { backgroundImage: `url("${mediaUrl(m.thumbPath)}")` } : {} })

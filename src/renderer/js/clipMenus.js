@@ -4,19 +4,26 @@
 import { store } from './store.js';
 import { showContextMenu } from './contextMenu.js';
 import { toast } from './util.js';
+import { hasClipboard, paste } from './clipboard.js';
 import * as tl from '../../shared/timeline.js';
 import { effectsForTrack, hasEffect } from '../../shared/effects.js';
 
-/** Open the menu for { kind: 'clip' | 'text' | 'media' | 'gap', id | trackId+t } at (x, y). */
+/** Open the menu for { kind: 'clip' | 'text' | 'media' | 'lane', id | trackId+t } at (x, y). */
 export function showItemMenu(target, run) {
   const { kind, id, x, y } = target;
   const items =
     kind === 'clip' ? clipItems(id, run)
     : kind === 'text' ? textItems(id, run)
-    : kind === 'gap' ? gapItems(target)
+    : kind === 'lane' ? laneItems(target)
     : mediaItems(id, run);
   if (items) showContextMenu(x, y, items);
 }
+
+const clipboardItems = (run, { pasteLabel = 'Paste after this clip' } = {}) => [
+  { label: 'Copy', shortcut: 'Ctrl+C', action: () => run('copy') },
+  { label: 'Cut', shortcut: 'Ctrl+X', action: () => run('cut') },
+  pasteLabel && { label: pasteLabel, shortcut: 'Ctrl+V', disabled: !hasClipboard(), action: () => run('paste') },
+];
 
 /** "Move to end of previous / start of next" items, disabled when there is no gap. */
 function gapMoveItems(id, start, end, run) {
@@ -29,11 +36,12 @@ function gapMoveItems(id, start, end, run) {
   ];
 }
 
-function gapItems({ trackId, t }) {
+/** Right-click on empty space in a lane: paste there, and close the gap if it is one. */
+function laneItems({ trackId, t }) {
   const gap = tl.gapAt(store.project, trackId, t);
-  if (!gap) return null;
   return [
-    {
+    { label: 'Paste here', shortcut: 'Ctrl+V', disabled: !hasClipboard(), action: () => paste({ at: t, trackId }) },
+    gap && {
       label: `Close gap (${(gap.end - gap.start).toFixed(2)} s)`,
       action: () => store.edit((p) => tl.closeGapAt(p, trackId, t)),
     },
@@ -60,6 +68,8 @@ function clipItems(id, run) {
   const fade = (changes) => store.edit((proj) => tl.setClipFades(proj, id, changes));
 
   return [
+    ...clipboardItems(run),
+    '-',
     { label: 'Split at playhead', shortcut: 'S', disabled: !playheadInside, action: () => run('split') },
     { label: 'Duplicate', shortcut: 'Ctrl+D', action: () => run('duplicate') },
     ...gapMoveItems(id, clip.start, end, run),
@@ -111,6 +121,8 @@ function textItems(id, run) {
   const item = tl.findText(store.project, id);
   if (!item) return null;
   return [
+    ...clipboardItems(run, { pasteLabel: null }),
+    '-',
     { label: 'Duplicate', shortcut: 'Ctrl+D', action: () => run('duplicate') },
     ...gapMoveItems(id, item.start, item.end, run),
     { label: 'Go to text start', action: () => store.setPlayhead(item.start) },

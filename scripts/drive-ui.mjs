@@ -216,6 +216,63 @@ await page.keyboard.press('Space');
 await page.keyboard.press('Control+z'); // reverse off again for the rest of the run
 console.log('after undo:', JSON.stringify((await reverseState()).reversed));
 
+// Copy / paste. Video clips now start at 0, 2, 5, 9 (lengths 2, 3, 4, 4).
+const zoomCP = await page.evaluate(() => window.cutncrop.store.zoom);
+const videoLane = await page.locator('.lane.video').boundingBox();
+const deselect = () => page.click('.lane.add-row', { position: { x: 5, y: 5 } });
+await page.click('.lane.video .clip:nth-child(1)', { position: { x: 20, y: 20 } });
+await page.keyboard.press('Control+c');
+await deselect();
+await page.keyboard.press('Control+v');
+console.log('Ctrl+V, nothing selected (expect a copy at 13):', JSON.stringify(await videoStarts()));
+await page.keyboard.press('Control+z');
+await page.click('.lane.video .clip:nth-child(2)', { position: { x: 20, y: 20 } });
+await page.keyboard.press('Control+v');
+console.log('Ctrl+V after clip 2..5 (expect insert at 5):', JSON.stringify(await videoStarts()));
+await page.keyboard.press('Control+z');
+const rulerBox = await page.locator('.ruler').boundingBox();
+await page.mouse.click(rulerBox.x + 3.5 * zoomCP, rulerBox.y + 5); // playhead 3.5, inside clip 2
+await page.keyboard.press('Control+Shift+v');
+console.log('Ctrl+Shift+V at 3.5 (expect split + insert):', JSON.stringify(await videoStarts()));
+await page.keyboard.press('Control+z');
+await page.keyboard.press('Home');
+await page.keyboard.press('ArrowDown');
+await page.keyboard.press('ArrowDown');
+console.log('Home, ↓, ↓ -> playhead', await page.evaluate(() => window.cutncrop.store.playhead));
+await page.click('.lane.video .clip:nth-child(2)', { button: 'right', position: { x: 20, y: 20 } });
+console.log('clip menu top:', JSON.stringify((await menuLabels()).slice(0, 3)));
+await page.keyboard.press('Escape');
+
+// Drag a media file onto the right half of clip 2..5: insertion line at 5, then insert.
+// Playwright only fires HTML5 drag events on release, so the hover state is checked by
+// dispatching the browser's own dragstart/dragover events like Windows does mid-drag.
+const markerAt = (xSeconds) => page.evaluate(({ xSeconds }) => {
+  const card = document.querySelector('.media-card:nth-child(3)');
+  const dt = new DataTransfer();
+  card.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true }));
+  const lane = document.querySelector('.lane.video');
+  const box = lane.getBoundingClientRect();
+  const x = box.left + xSeconds * window.cutncrop.store.zoom;
+  const y = box.top + 30;
+  document.elementFromPoint(x, y).dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  const m = document.querySelector('.drop-marker');
+  return { visible: !m.hidden, insert: m.classList.contains('insert'), at: +(parseFloat(m.style.transform.slice(11)) / window.cutncrop.store.zoom).toFixed(2) };
+}, { xSeconds });
+console.log('hover 4.3 s (right half of clip 2..5):', JSON.stringify(await markerAt(4.3)));
+console.log('hover 2.4 s (left half of clip 2..5):', JSON.stringify(await markerAt(2.4)));
+console.log('hover 13.3 s (empty, after the end):', JSON.stringify(await markerAt(13.3)));
+await markerAt(4.3);
+await ss('04d-drop-marker');
+const card = await page.locator('.media-card:nth-child(3)').boundingBox(); // webm, 4 s
+await page.mouse.move(card.x + 40, card.y + 20);
+await page.mouse.down();
+await page.mouse.move(videoLane.x + 4.3 * zoomCP, videoLane.y + 30, { steps: 12 });
+await page.mouse.up();
+await page.waitForTimeout(300);
+console.log('after drop (expect insert at 5):', JSON.stringify(await videoStarts()));
+await page.keyboard.press('Control+z');
+console.log('restored:', JSON.stringify(await videoStarts()));
+
 // Audio: clip sound sits on A1, linked. Select only the first clip's sound and
 // delete it (the video must stay), drop music in its place, drag a 1 s fade-in.
 const linkedOnA1 = await page.evaluate(() => document.querySelectorAll('.lane[data-track-id=a1] .clip .link-mark').length);

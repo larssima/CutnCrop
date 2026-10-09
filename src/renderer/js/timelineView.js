@@ -8,13 +8,19 @@ import { h, $, mediaUrl } from './util.js';
 import { getPeaks, PEAKS_PER_SECOND } from './media.js';
 import * as tl from '../../shared/timeline.js';
 import { EFFECTS, isReversed } from '../../shared/effects.js';
-import { formatDuration } from '../../shared/time.js';
+import { floorToFrame, frameDuration, formatDuration } from '../../shared/time.js';
 
 const SNAP_PX = 8;
 const DRAG_THRESHOLD_PX = 3;
 const MAX_CANVAS_PX = 4096;
 const TICK_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
 export const MEDIA_DRAG_TYPE = 'application/x-cutncrop-media';
+
+// Browsers hide drag data until the drop, so the media bin tells us what is being dragged.
+let draggedMediaId = null;
+export function setDraggedMedia(id) {
+  draggedMediaId = id;
+}
 
 /**
  * Does a clip selection include the clip's linked partners? A video clip is
@@ -98,36 +104,86 @@ export class TimelineView {
     this.scroll.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     this.content.addEventListener('contextmenu', (e) => this.onContextMenu(e));
 
+    // Dragging a media file over the lanes shows where it will land (dropMarker).
+    this.dropMarker = h('div.drop-marker', { hidden: true });
+    this.content.append(this.dropMarker);
     this.lanes.addEventListener('dragover', (e) => {
-      if (e.dataTransfer.types.includes(MEDIA_DRAG_TYPE) && e.target.closest('.lane.video, .lane.audio')) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
-      }
-    });
-    this.lanes.addEventListener('drop', (e) => {
-      const id = e.dataTransfer.getData(MEDIA_DRAG_TYPE);
       const lane = e.target.closest('.lane.video, .lane.audio');
-      if (!id || !lane) return;
+      if (!e.dataTransfer.types.includes(MEDIA_DRAG_TYPE) || !lane) return this.hideDropMarker();
+      const target = this.dropTarget(lane, e.clientX);
+      if (!target) return this.hideDropMarker();
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      this.showDropMarker(target);
+    });
+    // dragleave also fires when moving from a lane onto a clip inside it, so the
+    // marker hides only once dragover (which repeats while hovering) stops coming.
+    this.lanes.addEventListener('drop', (e) => {
+      this.hideDropMarker();
+      const lane = e.target.closest('.lane.video, .lane.audio');
+      if (!draggedMediaId || !lane) return;
+      const target = this.dropTarget(lane, e.clientX);
+      if (!target) return;
       e.preventDefault();
       e.stopPropagation();
-      this.dropMedia(id, lane.dataset.trackId, this.snap(this.timeAt(e.clientX)));
+      this.dropMedia(target);
     });
 
     new ResizeObserver(() => this.render()).observe(this.scroll);
   }
 
-  /** Media dropped on a lane: audio lanes take the media's audio; the video lane takes video. */
-  dropMedia(mediaId, trackId, t) {
-    const media = tl.findMedia(store.project, mediaId);
-    const track = tl.findTrack(store.project, trackId);
-    let target = null;
-    if (track.type === 'audio') {
-      if (!media.hasAudio) return;
-      target = trackId;
-    } else if (!media.hasVideo) {
-      target = null; // audio file dropped on video lane -> first audio track
+  /**
+   * Where the dragged media file would land:
+   * - video files on the video lane, over a clip: insert at that clip's nearer
+   *   edge (later clips on all lanes move right); over empty space: place it
+   *   there, or insert if it doesn't fit.
+   * - sound (audio files, or a video file's sound dropped on an audio lane): placed
+   *   where dropped; if that lane is busy it goes to a lane with room. Nothing is
+   *   pushed, so music never shoves the picture along.
+   */
+  dropTarget(laneEl, clientX) {
+    const project = store.project;
+    const media = draggedMediaId && tl.findMedia(project, draggedMediaId);
+    const lane = tl.findTrack(project, laneEl.dataset.trackId);
+    if (!media || !lane) return null;
+    let trackId = null;
+    if (lane.type === 'audio') {
+      if (!media.hasAudio) return null;
+      trackId = lane.id;
     }
-    const clip = store.edit((p) => tl.addClip(p, mediaId, t, target));
+    const track = trackId ? lane : media.hasVideo ? tl.videoTrack(project) : tl.audioTracks(project)[0];
+    const fps = project.settings.fps;
+    const duration = floorToFrame(media.duration, fps) || frameDuration(fps);
+    const t = this.timeAt(clientX);
+    if (track.type === 'audio') return { mediaId: media.id, trackId, at: this.snap(t), duration, insert: false };
+    const over = tl.clipAt(project, t, track);
+    if (over && t > over.start + 1e-6) {
+      const end = tl.clipEnd(over);
+      return { mediaId: media.id, trackId, at: t - over.start < end - t ? over.start : end, duration, insert: true };
+    }
+    const at = this.snap(t);
+    return { mediaId: media.id, trackId, at, duration, insert: !tl.fitsOnTrack(track, at, at + duration) };
+  }
+
+  showDropMarker({ at, insert }) {
+    clearTimeout(this.dropMarkerTimer);
+    this.dropMarkerTimer = setTimeout(() => this.hideDropMarker(), 200);
+    this.dropMarker.hidden = false;
+    this.dropMarker.classList.toggle('insert', insert);
+    this.dropMarker.style.transform = `translateX(${this.x(at)}px)`;
+    this.dropMarker.title = insert ? 'Insert here (later clips move right)' : 'Place here';
+  }
+
+  hideDropMarker() {
+    this.dropMarker.hidden = true;
+  }
+
+  /** Drop a media file at a dropTarget(). */
+  dropMedia({ mediaId, trackId, at, duration, insert }) {
+    const clip = store.edit((p) => {
+      if (insert) tl.insertSpace(p, at, duration);
+      return tl.addClip(p, mediaId, at, trackId);
+    });
     store.select({ kind: 'clip', id: clip.id });
   }
 
@@ -405,12 +461,12 @@ export class TimelineView {
   onContextMenu(e) {
     const itemEl = e.target.closest('.clip, .text-item');
     if (!itemEl) {
-      // Right-click on empty space between clips: offer to close that gap.
+      // Right-click on empty space in a lane: paste here / close the gap.
       const lane = e.target.closest('.lane.video, .lane.audio');
-      const t = this.timeAt(e.clientX);
-      if (lane && tl.gapAt(store.project, lane.dataset.trackId, t)) {
+      if (lane) {
         e.preventDefault();
-        store.emit('context-menu', { kind: 'gap', trackId: lane.dataset.trackId, t, x: e.clientX, y: e.clientY });
+        const t = this.snap(this.timeAt(e.clientX));
+        store.emit('context-menu', { kind: 'lane', trackId: lane.dataset.trackId, t, x: e.clientX, y: e.clientY });
       }
       return;
     }

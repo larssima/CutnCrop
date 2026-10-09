@@ -8,6 +8,7 @@ import { ExportDialog } from './exportDialog.js';
 import { ShortcutsDialog } from './shortcuts.js';
 import { showItemMenu } from './clipMenus.js';
 import { isContextMenuOpen } from './contextMenu.js';
+import { copySelection, cutSelection, paste } from './clipboard.js';
 import * as tl from '../../shared/timeline.js';
 import { createProject } from '../../shared/schema.js';
 import { formatTimecode, frameDuration } from '../../shared/time.js';
@@ -66,6 +67,15 @@ function clipToSplit() {
   const selected = s?.kind === 'clip' ? tl.findClip(store.project, s.id) : null;
   if (selected && t > selected.start && t < tl.clipEnd(selected)) return selected;
   return tl.clipAt(store.project, t);
+}
+
+/** Move the playhead to the previous (-1) or next (+1) cut between clips. */
+function jumpToCut(dir) {
+  preview.pause();
+  const now = store.playhead;
+  const points = tl.cutPoints(store.project);
+  const target = dir < 0 ? points.filter((t) => t < now - 1e-6).at(-1) : points.find((t) => t > now + 1e-6);
+  if (target !== undefined) store.setPlayhead(target);
 }
 
 /** The media file shown in the source monitor, or null when the preview shows the timeline. */
@@ -146,6 +156,12 @@ const commands = {
     }
   },
   shortcuts: () => shortcutsDialog.open(),
+  copy: () => copySelection(),
+  cut: () => cutSelection(),
+  paste: () => paste('auto'),
+  pasteAtPlayhead: () => paste('playhead'),
+  prevCut: () => jumpToCut(-1),
+  nextCut: () => jumpToCut(1),
   moveToPrevious: () => moveAgainstNeighbor('previous'),
   moveToNext: () => moveAgainstNeighbor('next'),
   unlink: () => {
@@ -178,8 +194,8 @@ function run(name) {
 }
 
 window.api.onCommand((name) => {
-  // Menu undo/redo in a text field means text undo.
-  if ((name === 'undo' || name === 'redo') && isTyping()) return document.execCommand(name);
+  // Menu undo/redo/copy/cut/paste in a text field act on the text.
+  if (['undo', 'redo', 'copy', 'cut', 'paste'].includes(name) && isTyping()) return document.execCommand(name);
   run(name);
 });
 store.on('command', run);
@@ -205,6 +221,9 @@ document.addEventListener('keydown', (e) => {
     if (key === 'z' && !e.shiftKey) run('undo');
     else if (key === 'y' || (key === 'z' && e.shiftKey)) run('redo');
     else if (key === 'd') run('duplicate');
+    else if (key === 'c') run('copy');
+    else if (key === 'x') run('cut');
+    else if (key === 'v') run(e.shiftKey ? 'pasteAtPlayhead' : 'paste');
     else if (e.key === 'ArrowLeft') run('moveToPrevious');
     else if (e.key === 'ArrowRight') run('moveToNext');
     else return;
@@ -219,6 +238,11 @@ document.addEventListener('keydown', (e) => {
     Home: 'start', End: 'end', Escape: 'closeSource', '?': 'shortcuts',
     '+': 'zoomIn', '=': 'zoomIn', '-': 'zoomOut', '\\': 'zoomFit',
   };
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    run(e.key === 'ArrowUp' ? 'prevCut' : 'nextCut');
+    e.preventDefault();
+    return;
+  }
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     const dir = e.key === 'ArrowLeft' ? -1 : 1;
     step(dir * (e.shiftKey ? Math.round(activeFps()) : 1));

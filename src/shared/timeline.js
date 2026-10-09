@@ -459,6 +459,112 @@ export function closeGapAt(project, trackId, t) {
 }
 
 /**
+ * Make room at time `at`: every clip (all tracks) and text item starting at or
+ * after `at` moves right by `duration`. Clips that span `at` stay put.
+ */
+export function insertSpace(project, at, duration) {
+  for (const t of clipTracks(project)) {
+    for (const c of t.clips) if (c.start >= at - 1e-6) c.start = round6(c.start + duration);
+  }
+  for (const x of textTrack(project).items) {
+    if (x.start >= at - 1e-6) {
+      x.start = round6(x.start + duration);
+      x.end = round6(x.end + duration);
+    }
+  }
+}
+
+/** All clip edges on video and audio tracks, plus 0, sorted and de-duplicated. */
+export function cutPoints(project) {
+  const points = new Set([0]);
+  for (const t of clipTracks(project)) for (const c of t.clips) points.add(c.start).add(clipEnd(c));
+  return [...points].sort((a, b) => a - b);
+}
+
+/**
+ * Snapshot a clip for pasting: with `withLinked` (default for video clips) its
+ * linked clips come along. Media entries are included, so a paste into another
+ * project works too. The copied clip comes first in `clips`.
+ */
+export function copyClip(project, clipId, { withLinked } = {}) {
+  const clip = findClip(project, clipId);
+  if (!clip) return null;
+  withLinked ??= trackOfClip(project, clipId).type === 'video';
+  const group = withLinked ? linkGroup(project, clip) : [clip];
+  group.sort((a, b) => (a === clip ? -1 : b === clip ? 1 : 0));
+  const mediaIds = [...new Set(group.map((c) => c.mediaId))];
+  return {
+    kind: 'clips',
+    duration: clipDuration(clip),
+    media: mediaIds.map((id) => structuredClone(findMedia(project, id))),
+    clips: group.map((c) => {
+      const track = trackOfClip(project, c.id);
+      const { id, start, linkId, ...data } = structuredClone(c);
+      return { trackType: track.type, trackId: track.id, offset: round6(start - clip.start), linked: group.length > 1 && Boolean(linkId), data };
+    }),
+  };
+}
+
+/** Snapshot a text item for pasting. */
+export function copyText(project, itemId) {
+  const item = findText(project, itemId);
+  if (!item) return null;
+  const { id, ...data } = structuredClone(item);
+  return { kind: 'text', duration: round6(item.end - item.start), data };
+}
+
+/**
+ * Paste a clipboard snapshot at time `at`. With `insert`, everything from `at`
+ * on moves right first to make room. Returns the pasted copy of the copied clip.
+ */
+export function pasteClips(project, clipboard, at, { insert = false } = {}) {
+  // Reuse media already in the project (same id or same file); add what's missing.
+  const mediaMap = new Map();
+  for (const m of clipboard.media) {
+    const existing = project.media.find((x) => x.id === m.id) ?? project.media.find((x) => x.path === m.path);
+    if (existing) mediaMap.set(m.id, existing.id);
+    else {
+      const copy = structuredClone(m);
+      if (project.media.some((x) => x.id === copy.id)) copy.id = newId('m');
+      project.media.push(copy);
+      mediaMap.set(m.id, copy.id);
+    }
+  }
+  at = Math.max(0, snapToFrame(at, project.settings.fps));
+  if (insert) insertSpace(project, at, clipboard.duration);
+
+  const linkId = clipboard.clips.some((c) => c.linked) ? newId('l') : undefined;
+  const created = clipboard.clips.map((c) => {
+    const clip = { ...structuredClone(c.data), id: newId('c'), mediaId: mediaMap.get(c.data.mediaId), start: round6(at + c.offset) };
+    if (c.linked) clip.linkId = linkId;
+    let track;
+    if (c.trackType === 'video') track = videoTrack(project);
+    else {
+      // Back on the lane it came from if there's room, else the first audio lane with room.
+      const lane = findTrack(project, c.trackId);
+      track = lane?.type === 'audio' && fitsOnTrack(lane, clip.start, clipEnd(clip)) ? lane : audioTrackWithRoom(project, clip.start, clipEnd(clip));
+    }
+    track.clips.push(clip);
+    return clip;
+  });
+  resolveOverlaps(project, created.map((c) => c.id));
+  return created[0];
+}
+
+/** Paste a copied text item starting at `at`. */
+export function pasteText(project, clipboard, at) {
+  const start = Math.max(0, snapToFrame(at, project.settings.fps));
+  const item = { ...structuredClone(clipboard.data), id: newId('x'), start, end: round6(start + clipboard.duration) };
+  textTrack(project).items.push(item);
+  return item;
+}
+
+/** End of the clips on one track (0 when empty). */
+export function trackEnd(track) {
+  return track.clips.reduce((max, c) => Math.max(max, clipEnd(c)), 0);
+}
+
+/**
  * Duplicate a clip (with its linked clips, which stay linked to each other)
  * right after the original. Later clips are pushed to make room.
  * Returns the copy of clipId.

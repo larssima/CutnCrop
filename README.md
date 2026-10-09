@@ -104,6 +104,10 @@ Right-click a clip, text item or media file for a menu of everything you can do 
 | Home / End | Go to start / end |
 | S | Split at playhead |
 | T | Add text at playhead |
+| Ctrl+C / Ctrl+X | Copy / cut the selected clip (a video clip comes with its sound) or text |
+| Ctrl+V | Paste right after the selected clip, or at the end of the timeline if nothing is selected |
+| Ctrl+Shift+V | Paste at the playhead (a clip under it is split) |
+| ↑ / ↓ | Jump to the previous / next cut between clips |
 | Ctrl+D | Duplicate the selected clip or text |
 | Ctrl+← / Ctrl+→ | Move the selected clip to the end of the previous / start of the next clip |
 | F1 / ? | Keyboard & mouse shortcut chart |
