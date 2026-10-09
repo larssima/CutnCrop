@@ -1,8 +1,12 @@
-// Timeline playback in a single <video> element. While a clip plays, the video's
-// own clock drives the playhead (smooth audio); in gaps the wall clock does.
-// While the video is loading or seeking the playhead holds, so it never jumps back.
+// Timeline playback. While a clip plays, the video's own clock drives the
+// playhead (smooth audio); in gaps and on images the wall clock does. While a
+// video is loading or seeking the playhead holds, so it never jumps back.
 //
-// Source mode (store.source set): the same element shows one media file on its
+// Two <video> elements take turns (double buffering): one is shown, the other
+// ("standby") preloads the next clip's file at its first frame, so a cut to a
+// different file is an instant swap instead of a load with a black flash.
+//
+// Source mode (store.source set): the shown element plays one media file on its
 // own, with its own time and a scrub bar, so files can be checked before they
 // go on the timeline.
 
@@ -17,31 +21,36 @@ import {
 import { isReversed, sourceTimeAt } from '../../shared/effects.js';
 import { frameDuration } from '../../shared/time.js';
 
+const PRELOAD_AHEAD = 3; // seconds before a cut to start loading the next clip
+
 export class Preview {
   constructor(root) {
     this.frame = $('.preview-frame', root);
-    this.video = $('video', root);
+    this.videos = [...root.querySelectorAll('.preview-frame video')];
+    this.activeIndex = 0;
     this.overlay = $('.text-overlay', root);
     this.message = $('.preview-message', root);
     this.note = $('.preview-note', root);
     this.image = $('.preview-image', root);
-    this.clipMode = 'forward'; // 'forward' | 'reverse-file' | 'reverse-step' for the clip under the playhead
+    this.clipMode = 'forward'; // 'forward' | 'reverse-file' | 'reverse-step' | 'image' for the clip under the playhead
     this.sourceBadge = $('.source-badge', root);
     this.sourceBar = $('.source-bar', root);
     this.sourceFill = $('.source-fill', root);
     this.playing = false;
     this.lastTick = 0;
-    this.currentSrc = null;
     this.failedSrcs = new Set(); // originals Chromium can't decode (e.g. WMV)
     this.pendingSeek = null;
     this.audio = new AudioTracksPlayer(this.failedSrcs);
 
-    this.video.addEventListener('seeked', () => this.flushSeek());
-    this.video.addEventListener('error', () => {
-      if (this.currentSrc) this.failedSrcs.add(this.currentSrc);
-      this.currentSrc = null;
-      this.sync();
-    });
+    for (const el of this.videos) {
+      el.muted = true;
+      el.addEventListener('seeked', () => el === this.video && this.flushSeek());
+      el.addEventListener('error', () => {
+        if (el.dataset.file) this.failedSrcs.add(el.dataset.file);
+        el.dataset.file = '';
+        if (el === this.video) this.sync();
+      });
+    }
 
     store.on('project', () => {
       this.fitFrame();
@@ -78,6 +87,21 @@ export class Preview {
 
     new ResizeObserver(() => this.fitFrame()).observe(this.frame.parentElement);
     this.fitFrame();
+  }
+
+  /** The video element being shown. */
+  get video() {
+    return this.videos[this.activeIndex];
+  }
+
+  /** The other video element, preloading what comes next. */
+  get standby() {
+    return this.videos[1 - this.activeIndex];
+  }
+
+  /** File loaded in the shown element (null if none). */
+  get currentSrc() {
+    return this.video.dataset.file || null;
   }
 
   sourceMedia() {
@@ -135,7 +159,7 @@ export class Preview {
 
   pause() {
     this.playing = false;
-    this.video.pause();
+    for (const el of this.videos) el.pause();
     // Stay on the frame where playback stopped instead of seeking back to the
     // slightly older time of the last animation frame.
     if (store.source && this.currentSrc && this.video.readyState >= 2) store.setSourceTime(this.video.currentTime);
@@ -173,6 +197,10 @@ export class Preview {
       if (next && t > next.start) t = next.start;
     } else if (this.clipMode === 'reverse-step' || this.clipMode === 'image') {
       t += dt; // stills and not-yet-ready reversed previews follow the wall clock
+    } else if (this.reachedClipEnd(clip)) {
+      // The file ran out where the clip ends (the browser pauses a video by itself
+      // at its end): the clip is done, go on to the next one.
+      t = clipEnd(clip);
     } else if (this.videoReady()) {
       // A reversed preview file starts at the clip start; a source file at `in`.
       t = clip.start + (this.clipMode === 'reverse-file' ? this.video.currentTime : this.video.currentTime - clip.in);
@@ -192,6 +220,22 @@ export class Preview {
     requestAnimationFrame(() => this.tick());
   }
 
+  /**
+   * Has the shown video played up to the end of this clip? True when the file
+   * ended, or when it is within half a frame of the clip's end in file time
+   * (a reversed preview file starts at the clip start; a source file at `in`).
+   */
+  reachedClipEnd(clip) {
+    if (!this.currentSrc || this.video.seeking) return false;
+    if (this.video.ended) return true;
+    return this.video.currentTime >= this.fileEndOf(clip) - 0.5 * frameDuration(store.project.settings.fps);
+  }
+
+  /** File time at which a clip ends in the file the shown element plays for it. */
+  fileEndOf(clip) {
+    return this.clipMode === 'reverse-file' ? clip.out - clip.in : clip.out;
+  }
+
   videoReady() {
     return this.currentSrc && !this.video.seeking && this.video.readyState >= 3 && !this.video.paused;
   }
@@ -208,7 +252,73 @@ export class Preview {
     return Boolean(media && this.sourceFor(media));
   }
 
-  /** Make the video element show the right frame for the playhead (or source time). */
+  /**
+   * What to show for a video clip at timeline time t:
+   *   { mode: 'image' } | { mode: 'missing', media } |
+   *   { mode: 'forward' | 'reverse-file' | 'reverse-step', file, target, linked }
+   * Forward clips play their source. Reversed clips play a pre-rendered reversed
+   * file; until it exists (and always while paused, which is instant and exact)
+   * the right frame is shown by seeking the source backwards.
+   */
+  plan(clip, t, playing) {
+    const project = store.project;
+    const media = findMedia(project, clip.mediaId);
+    if (media.isImage) return { mode: 'image', media };
+    const src = this.sourceFor(media);
+    if (!src) return { mode: 'missing', media };
+    // A linked audio clip has the same timing and file as the video, so the
+    // video element plays it directly (exact lip sync); unlinked audio plays
+    // through the audio-track player instead.
+    const linked = linkedAudioOf(project, clip);
+    const rel = t - clip.start;
+    if (!isReversed(clip)) return { mode: 'forward', file: src, target: clip.in + rel, linked };
+    const reversedFile = reversedFileFor(clip, { video: true, audio: Boolean(linked && isReversed(linked)) });
+    if (playing && reversedFile) return { mode: 'reverse-file', file: reversedFile, target: rel, linked };
+    const target = Math.max(clip.in, sourceTimeAt(clip, rel) - 0.5 * frameDuration(project.settings.fps));
+    return { mode: 'reverse-step', file: src, target, linked };
+  }
+
+  /** Point an element at a file and position. */
+  load(el, file, time) {
+    el.dataset.file = file;
+    el.src = mediaUrl(file);
+    el.currentTime = time;
+  }
+
+  /** Show the standby element instead of the current one (it was preloaded). */
+  swap() {
+    const old = this.video;
+    old.pause();
+    old.muted = true;
+    this.activeIndex = 1 - this.activeIndex;
+    this.pendingSeek = null;
+    old.classList.remove('shown');
+  }
+
+  setVideoShown(shown) {
+    this.video.classList.toggle('shown', shown);
+    this.standby.classList.remove('shown');
+  }
+
+  /**
+   * Get the standby element ready for the next video clip after time `after`,
+   * when it starts within PRELOAD_AHEAD seconds. Skipped when the shown element
+   * just continues into it (same file, contiguous) or it isn't a playable video.
+   */
+  preloadNext(after, continuing = null) {
+    const next = sortedClips(store.project).find((c) => c.start >= after - 1e-6);
+    if (!next || next.start - store.playhead > PRELOAD_AHEAD) return;
+    const p = this.plan(next, next.start, true);
+    if (p.mode !== 'forward' && p.mode !== 'reverse-file') return;
+    if (continuing && continuing.file === p.file && Math.abs(continuing.time - p.target) < 0.05) return;
+    const sb = this.standby;
+    sb.muted = true;
+    if (!sb.paused) sb.pause();
+    if (sb.dataset.file !== p.file) this.load(sb, p.file, p.target);
+    else if (!sb.seeking && Math.abs(sb.currentTime - p.target) > 0.02) sb.currentTime = p.target;
+  }
+
+  /** Make the shown video element show the right frame for the playhead (or source time). */
   sync() {
     if (store.source) return this.syncSource();
     const project = store.project;
@@ -218,80 +328,61 @@ export class Preview {
     this.audio.sync(t, this.playing);
 
     if (!clip) {
-      this.video.style.visibility = 'hidden';
+      this.setVideoShown(false);
       this.showImage(null);
       this.showMessage(null);
       this.showNote(null);
       this.clipMode = 'forward';
       if (!this.video.paused) this.video.pause();
+      if (this.playing) this.preloadNext(t);
       return;
     }
-    const media = findMedia(project, clip.mediaId);
-    if (media.isImage) {
+    const p = this.plan(clip, t, this.playing);
+    if (p.mode === 'image') {
       this.clipMode = 'image';
       this.showNote(null);
-      this.video.style.visibility = 'hidden';
+      this.setVideoShown(false);
       if (!this.video.paused) this.video.pause();
-      this.showImage(media);
+      this.showImage(p.media);
+      if (this.playing) this.preloadNext(clipEnd(clip));
       return;
     }
     this.showImage(null);
-    const src = this.sourceFor(media);
-    if (!src) {
-      this.video.style.visibility = 'hidden';
-      const pct = Math.round((store.mediaStatus.get(media.id)?.proxyProgress ?? 0) * 100);
+    if (p.mode === 'missing') {
+      this.setVideoShown(false);
+      const pct = Math.round((store.mediaStatus.get(p.media.id)?.proxyProgress ?? 0) * 100);
       this.showMessage(`Preparing preview… ${pct}%`);
       return;
     }
     this.showMessage(null);
-    this.video.style.visibility = 'visible';
+    this.clipMode = p.mode;
+    this.showNote(this.playing && p.mode === 'reverse-step' ? 'Preparing reversed preview… (silent until ready)' : null);
 
-    // A linked audio clip has the same timing and file as the video, so the
-    // video element plays it directly (exact lip sync); unlinked audio plays
-    // through the audio-track player instead.
-    const linked = linkedAudioOf(project, clip);
+    if (this.currentSrc !== p.file) {
+      // Use the preloaded standby if it's ready at this frame; otherwise load here.
+      const sb = this.standby;
+      const ready = sb.dataset.file === p.file && sb.readyState >= 2 && !sb.seeking && Math.abs(sb.currentTime - p.target) < 0.15;
+      if (ready) this.swap();
+      else this.load(this.video, p.file, p.target);
+    }
+    this.setVideoShown(true);
+
+    const { linked } = p;
     const linkedTrack = linked && trackOfClip(project, linked.id);
-
-    // Which file and position: forward clips play their source. Reversed clips
-    // play a pre-rendered reversed file; until it exists (and always while
-    // paused, which is instant and exact) the right frame is shown by seeking
-    // the source backwards.
-    const rel = t - clip.start;
-    let file = src;
-    let target = clip.in + rel;
-    this.clipMode = 'forward';
-    if (isReversed(clip)) {
-      const reversedFile = reversedFileFor(clip, { video: true, audio: Boolean(linked && isReversed(linked)) });
-      if (this.playing && reversedFile) {
-        file = reversedFile;
-        target = rel;
-        this.clipMode = 'reverse-file';
-      } else {
-        target = Math.max(clip.in, sourceTimeAt(clip, rel) - 0.5 * frameDuration(project.settings.fps));
-        this.clipMode = 'reverse-step';
-      }
-    }
-    this.showNote(this.playing && this.clipMode === 'reverse-step' ? 'Preparing reversed preview… (silent until ready)' : null);
-
-    if (this.currentSrc !== file) {
-      this.currentSrc = file;
-      this.video.src = mediaUrl(file);
-      this.video.currentTime = target;
-    }
-
-    this.video.volume = linked ? Math.min(1, linked.volume * fadeGain(linked, rel)) : 0;
-    if (this.playing && this.clipMode !== 'reverse-step') {
+    this.video.volume = linked ? Math.min(1, linked.volume * fadeGain(linked, t - clip.start)) : 0;
+    if (this.playing && p.mode !== 'reverse-step') {
       this.video.muted = !linked || linked.muted || linkedTrack.muted;
       if (this.video.paused) {
-        this.seek(target);
+        this.seek(p.target);
         this.video.play().catch(() => {});
-      } else if (!this.video.seeking && Math.abs(this.video.currentTime - target) > 0.25) {
+      } else if (!this.video.seeking && Math.abs(this.video.currentTime - p.target) > 0.25) {
         // Jumped to another clip of the same file, or drifted: resync.
-        this.seek(target);
+        this.seek(p.target);
       }
+      this.preloadNext(clipEnd(clip), { file: p.file, time: this.fileEndOf(clip) });
     } else {
       if (!this.video.paused) this.video.pause();
-      this.seek(target);
+      this.seek(p.target);
     }
   }
 
@@ -303,9 +394,10 @@ export class Preview {
     this.showNote(null);
     this.clipMode = 'forward';
     this.lastTextKey = null;
+    this.standby.pause();
     if (media.isImage) {
       this.audio.stopAll();
-      this.video.style.visibility = 'hidden';
+      this.setVideoShown(false);
       if (!this.video.paused) this.video.pause();
       this.showImage(media);
       return;
@@ -315,21 +407,17 @@ export class Preview {
 
     const src = this.sourceFor(media);
     if (!src) {
-      this.video.style.visibility = 'hidden';
+      this.setVideoShown(false);
       const pct = Math.round((store.mediaStatus.get(media.id)?.proxyProgress ?? 0) * 100);
       this.showMessage(`Preparing preview… ${pct}%`);
       return;
     }
     // Audio files play through the same element; show a placeholder instead of a picture.
-    this.video.style.visibility = media.hasVideo ? 'visible' : 'hidden';
+    this.setVideoShown(media.hasVideo);
     this.showMessage(media.hasVideo ? null : `♪ ${media.name}`);
 
     const target = store.source.time;
-    if (this.currentSrc !== src) {
-      this.currentSrc = src;
-      this.video.src = mediaUrl(src);
-      this.video.currentTime = target;
-    }
+    if (this.currentSrc !== src) this.load(this.video, src, target);
     this.video.volume = 1;
     if (this.playing) {
       this.video.muted = false;

@@ -3,6 +3,13 @@
 All notable changes to CutnCrop. Versions follow [semantic versioning](https://semver.org):
 MAJOR for incompatible project-file or behavior changes, MINOR for new features, PATCH for fixes.
 
+## Unreleased
+
+- Fix: playback stalled (the picture jumped back and forth) at the end of a clip that
+  ends where its file ends — always the case for reversed clips, and for untrimmed clips.
+- Smoother cuts in the preview: the next clip's file is preloaded in a second player
+  and swapped in at the cut, instead of being loaded at the cut.
+
 ## 0.3.0 — 2026-10-09
 
 - Effects, starting with **Reverse**: right-click a clip → Effects → Reverse (or the

@@ -61,7 +61,7 @@ await ss('02-imported');
 // Source monitor: click a media file to preview it without adding it to the timeline
 const sourceState = () => page.evaluate(() => {
   const { store } = window.cutncrop;
-  const v = document.querySelector('video');
+  const v = window.cutncrop.preview.video;
   return {
     badge: !document.querySelector('.source-badge').hidden ? document.querySelector('.source-name').textContent : null,
     time: store.source ? +store.source.time.toFixed(2) : null,
@@ -70,7 +70,7 @@ const sourceState = () => page.evaluate(() => {
     readyState: v.readyState,
     playhead: store.playhead,
     message: document.querySelector('.preview-message').hidden ? null : document.querySelector('.preview-message').textContent,
-    videoVisible: v.style.visibility !== 'hidden',
+    videoVisible: v.classList.contains('shown'),
     tc: document.querySelector('#timecode').textContent,
     clips: document.querySelectorAll('.clip').length,
   };
@@ -175,7 +175,7 @@ await page.click('.context-item:has-text("Reverse")');
 const reverseState = () => page.evaluate(() => {
   const { store, preview } = window.cutncrop;
   const all = store.project.tracks.flatMap((t) => t.clips ?? []);
-  const v = document.querySelector('video');
+  const v = window.cutncrop.preview.video;
   return {
     reversed: all.filter((c) => c.effects?.some((e) => e.type === 'reverse')).map((c) => `${c.start}..${+(c.start + c.out - c.in).toFixed(2)}`),
     marks: document.querySelectorAll('.effect-mark').length,
@@ -332,7 +332,7 @@ await page.keyboard.press('Home');
 await page.keyboard.press('Space');
 await page.waitForTimeout(2000);
 const playing = await page.evaluate(() => {
-  const v = document.querySelector('video');
+  const v = window.cutncrop.preview.video;
   const { store, preview } = window.cutncrop;
   const clips = store.project.tracks.filter((t) => t.type === 'audio').flatMap((t) => t.clips);
   const audio = [...preview.audio.entries].map(([id, { el }]) => {
@@ -392,7 +392,7 @@ await page.evaluate((t) => window.cutncrop.store.setPlayhead(t), startImg + 1);
 await page.waitForTimeout(300);
 const imagePreview = () => page.evaluate(() => ({
   image: !document.querySelector('.preview-image').hidden,
-  videoVisible: document.querySelector('video').style.visibility !== 'hidden',
+  videoVisible: window.cutncrop.preview.video.classList.contains('shown'),
   mode: window.cutncrop.preview.clipMode,
   playhead: +window.cutncrop.store.playhead.toFixed(2),
 }));
@@ -419,6 +419,47 @@ await page.waitForTimeout(500);
 const saved = fs.existsSync(projectPath) && JSON.parse(fs.readFileSync(projectPath, 'utf8'));
 console.log('saved project:', saved ? `${saved.media.length} media, ${saved.tracks[0].clips.length} clips` : 'MISSING');
 console.log('window title:', await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle()));
+
+// Regression (reported): clip A, duplicate -> B, reverse B, copy A, paste at the end -> C.
+// Playing from B into C used to stall just before the cut (the reversed file ended
+// and the browser paused it). Measure how long the playhead sits right before the cut.
+await page.click('[data-command=new]'); // the project was just saved, so no prompt
+await stubDialogs([path.join(mediaDir, 'cfr25_720p.mp4')], exportPath);
+await page.click('[data-command=import]');
+await page.waitForFunction(() => window.cutncrop.store.project.media[0]?.proxyPath, null, { timeout: 60_000 });
+await page.dblclick('.media-card');
+await page.click('.lane.video .clip', { position: { x: 20, y: 20 } });
+await page.keyboard.press('Control+d');
+await page.click('.lane.video .clip:nth-child(2)', { button: 'right', position: { x: 20, y: 20 } });
+await page.click('.context-item:has-text("Reverse")');
+await page.click('.lane.video .clip:nth-child(1)', { position: { x: 20, y: 20 } });
+await page.keyboard.press('Control+c');
+await page.click('.lane.add-row', { position: { x: 5, y: 5 } });
+await page.keyboard.press('Control+v');
+await page.waitForTimeout(4000); // reversed preview renders in the background
+const stall = await page.evaluate(async () => {
+  const { store, preview } = window.cutncrop;
+  const clips = [...store.project.tracks[0].clips].sort((a, b) => a.start - b.start);
+  const cut = clips[1].start + clips[1].out - clips[1].in;
+  store.setPlayhead(cut - 1);
+  await new Promise((r) => setTimeout(r, 400));
+  preview.play();
+  let stuckSince = null;
+  let longest = 0;
+  const end = performance.now() + 2500;
+  while (performance.now() < end) {
+    await new Promise((r) => requestAnimationFrame(r));
+    const near = store.playhead > cut - 0.1 && store.playhead < cut;
+    if (near && stuckSince === null) stuckSince = performance.now();
+    if (!near && stuckSince !== null) {
+      longest = Math.max(longest, performance.now() - stuckSince);
+      stuckSince = null;
+    }
+  }
+  preview.pause();
+  return { clips: clips.map((c) => `${c.start}..${c.start + c.out - c.in}${c.effects.length ? ' reversed' : ''}`), cut, playheadAfter: +store.playhead.toFixed(2), msInLast100msBeforeCut: Math.round(longest), shownAfter: preview.video.dataset.slot };
+});
+console.log('reverse -> forward cut:', JSON.stringify(stall), stall.msInLast100msBeforeCut < 250 && stall.playheadAfter > stall.cut + 1 ? 'OK' : 'STALL');
 
 console.log(problems.length ? `PROBLEMS:\n${problems.join('\n')}` : 'no console errors');
 await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => w.destroy()));

@@ -165,6 +165,9 @@ textarea { resize: vertical; }
 .source-fill { height: 100%; width: 0; background: var(--accent-2); pointer-events: none; }
 .preview-frame { position: relative; background: #000; overflow: hidden; box-shadow: 0 0 0 1px #262830; }
 .preview-frame video, .preview-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+/* Two video elements take turns; only the shown one is visible (the other preloads). */
+.preview-frame video { opacity: 0; }
+.preview-frame video.shown { opacity: 1; }
 .preview-image[hidden] { display: none; }
 .text-overlay { position: absolute; inset: 0; pointer-events: none; }
 .overlay-text {
