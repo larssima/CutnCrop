@@ -37,9 +37,17 @@ async function produce(outPath, args, opts) {
   }
 }
 
+// Images: transparency becomes black, the same as in the export.
+const FLATTEN = 'format=rgba,premultiply=inplace=1';
+
 export async function makeThumbStrip(media, cacheDir) {
   const out = path.join(cacheDir, `${await cacheKey(media.path)}-thumbs.jpg`);
   if (await exists(out)) return out;
+  if (media.isImage) {
+    // One thumbnail; the timeline repeats it along the clip.
+    await produce(out, ['-i', media.path, '-vf', `${FLATTEN},scale=-2:90`, '-frames:v', '1', '-q:v', '5']);
+    return out;
+  }
   const rate = THUMB_TILES / Math.max(media.duration, 0.1);
   await produce(out, [
     '-i', media.path,
@@ -95,7 +103,20 @@ export async function makePeaks(media, cacheDir) {
   return out;
 }
 
+/** Preview copy of an image: a JPEG no larger than 1920x1080 (Chromium can't show TIFF/HEIC, and big photos are slow). */
+async function makeImageProxy(media, cacheDir) {
+  const out = path.join(cacheDir, `${await cacheKey(media.path)}-proxy.jpg`);
+  if (await exists(out)) return out;
+  await produce(out, [
+    '-i', media.path,
+    '-vf', `${FLATTEN},scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease`,
+    '-frames:v', '1', '-q:v', '3',
+  ]);
+  return out;
+}
+
 export async function makeProxy(media, cacheDir, onProgress) {
+  if (media.isImage) return makeImageProxy(media, cacheDir);
   if (!media.hasVideo) return makeAudioProxy(media, cacheDir, onProgress);
   const out = path.join(cacheDir, `${await cacheKey(media.path)}-proxy.mp4`);
   if (await exists(out)) return out;

@@ -188,6 +188,7 @@ export function toggleEffect(project, clipId, type) {
   const clip = findClip(project, clipId);
   const def = EFFECTS[type];
   if (!clip || !def) throw new Error(`Unknown effect ${type}`);
+  if (isImageClip(project, clip) && !def.images) throw new Error(`${def.label} doesn't apply to images`);
   const on = !hasEffect(clip, type);
   const targets = def.linked ? linkGroup(project, clip) : [clip];
   for (const c of targets) {
@@ -196,6 +197,18 @@ export function toggleEffect(project, clipId, type) {
     if (on) c.effects.push({ type });
   }
   return on;
+}
+
+/** Length of a clip made from a whole media item: the file's length, or the default for images. */
+export function newClipDuration(project, media) {
+  const fps = project.settings.fps;
+  if (media.isImage) return Math.max(frameDuration(fps), snapToFrame(project.settings.imageDuration ?? 5, fps));
+  return floorToFrame(media.duration, fps) || frameDuration(fps);
+}
+
+/** Is this clip a still image (shown for as long as the clip lasts)? */
+export function isImageClip(project, clip) {
+  return Boolean(findMedia(project, clip.mediaId)?.isImage);
 }
 
 /**
@@ -220,7 +233,7 @@ export function addClip(project, mediaId, start = null, trackId = null) {
     mediaId,
     start: snapToFrame(start ?? trackEnd, fps),
     in: 0,
-    out: floorToFrame(media.duration, fps) || frameDuration(fps),
+    out: newClipDuration(project, media),
   };
 
   if (track.type === 'audio') {
@@ -276,14 +289,30 @@ export function trimClip(project, clipId, edge, t) {
   const media = findMedia(project, clip.mediaId);
   const fps = project.settings.fps;
   const minDur = frameDuration(fps);
-  const maxOut = floorToFrame(media.duration, fps) || media.duration;
   const reversed = isReversed(clip);
   const dur = clip.out - clip.in;
   t = snapToFrame(t, fps);
 
+  // A left edge stops at the end of the previous clip instead of shoving it aside.
+  const leftLimit = -(clip.start - (previousEnd(project, clipId) ?? 0));
+
+  if (media.isImage) {
+    // Every frame of an image is the same: either edge just sets how long it shows.
+    if (edge === 'in') {
+      const delta = Math.min(Math.max(t - clip.start, leftLimit), dur - minDur);
+      clip.start = round6(clip.start + delta);
+      clip.out = round6(clip.out - delta);
+    } else {
+      clip.out = round6(clip.in + Math.max(t - clip.start, minDur));
+    }
+    resolveOverlaps(project, [clip.id]);
+    return;
+  }
+
+  const maxOut = floorToFrame(media.duration, fps) || media.duration;
   if (edge === 'in') {
     // How far the left edge moves right (negative = extend to the left).
-    const minDelta = Math.max(-clip.start, reversed ? clip.out - maxOut : -clip.in);
+    const minDelta = Math.max(leftLimit, reversed ? clip.out - maxOut : -clip.in);
     const delta = Math.min(Math.max(t - clip.start, minDelta), dur - minDur);
     clip.start = round6(clip.start + delta);
     if (reversed) clip.out = round6(clip.out - delta);
@@ -317,7 +346,12 @@ export function splitClip(project, clipId, t) {
     const splitSource = round6(sourceTimeAt(c, t - c.start));
     const right = { ...c, id: newId('c'), start: t, effects: cloneEffects(c.effects) };
     if (newLink) right.linkId = newLink;
-    if (isReversed(c)) {
+    if (isImageClip(project, c)) {
+      // Both halves show the same image: just divide the length.
+      right.in = 0;
+      right.out = round6(c.out - c.in - (t - c.start));
+      c.out = round6(c.in + (t - c.start));
+    } else if (isReversed(c)) {
       // Left part shows source [split, out), right part [in, split) — both backwards.
       right.out = splitSource;
       c.in = splitSource;
@@ -626,6 +660,12 @@ export function unlinkClip(project, clipId) {
 }
 
 /** Fade lengths in seconds, kept within the clip. Audio clips only. */
+/** How long an image clip shows (seconds, snapped to frames). The start stays put. */
+export function setImageDuration(project, clipId, seconds) {
+  const clip = findClip(project, clipId);
+  trimClip(project, clipId, 'out', clip.start + Math.max(seconds, frameDuration(project.settings.fps)));
+}
+
 export function setClipFades(project, clipId, { fadeIn, fadeOut }) {
   const clip = findClip(project, clipId);
   const fps = project.settings.fps;

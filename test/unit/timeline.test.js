@@ -428,6 +428,33 @@ test('copying only the sound, text copy/paste, cut points', () => {
   assert.deepEqual(tl.cutPoints(p), [0, 10, 12, 22]);
 });
 
+test('images: default duration, stretch either edge, split, no reverse', () => {
+  const p = projectWithAudio();
+  p.media.push({ id: 'img', path: 'photo.jpg', isImage: true, duration: null, hasVideo: true, hasAudio: false, width: 4000, height: 3000 });
+  p.settings.imageDuration = 4;
+  const v = tl.addClip(p, 'm1', 0); // 0..10
+  const img = tl.addClip(p, 'img'); // after the video
+  assert.deepEqual([img.start, img.in, img.out], [10, 0, 4]);
+  assert.equal(tl.linkedPartners(p, img).length, 0, 'images have no sound');
+  assert.ok(tl.isImageClip(p, img));
+
+  tl.trimClip(p, img.id, 'out', 100); // stretch far beyond any "source length"
+  assert.equal(tl.clipDuration(img), 90);
+  tl.setImageDuration(p, img.id, 7.5);
+  assert.deepEqual([img.start, img.out], [10, 7.5]);
+  tl.trimClip(p, v.id, 'out', 6); // make room on the left
+  tl.trimClip(p, img.id, 'in', 8); // left edge from 10 to 8: 2 s longer, in stays 0
+  assert.deepEqual([img.start, img.in, img.out], [8, 0, 9.5]);
+  tl.trimClip(p, img.id, 'in', 0); // left edge stops at the end of the video (6)
+  assert.deepEqual([img.start, img.in, img.out], [6, 0, 11.5]);
+  assert.equal(v.start, 0, 'the video was not pushed aside');
+
+  const right = tl.splitClip(p, img.id, img.start + 3);
+  assert.deepEqual([img.out, right.in], [3, 0]);
+  assert.throws(() => tl.toggleEffect(p, img.id, 'reverse'), /images/);
+  assert.deepEqual(validateProject(p), []);
+});
+
 test('ripple delete shifts every track after the hole', () => {
   const p = projectWithAudio();
   const v1 = tl.addClip(p, 'm1');

@@ -79,6 +79,16 @@ export function flashTimes(file, { ignoreEditList = false } = {}) {
   return times;
 }
 
+/** Average luma (0-255) of a crop { w, h, x, y } of the frame at time t. */
+export function lumaAt(file, t, { w, h, x, y }) {
+  const r = spawnSync(ffmpegPaths().ffmpeg, [
+    '-hide_banner', '-ss', String(t), '-i', file, '-frames:v', '1',
+    '-vf', `crop=${w}:${h}:${x}:${y},signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-`,
+    '-f', 'null', '-',
+  ], { encoding: 'utf8' });
+  return Number(/YAVG=([\d.]+)/.exec(r.stdout)?.[1]);
+}
+
 /** Mean and max volume (dB) of the audio in [start, start + dur). */
 export function volumeStats(file, start = 0, dur = null) {
   const r = spawnSync(ffmpegPaths().ffmpeg, [

@@ -356,6 +356,53 @@ await page.keyboard.press('Control+y');
 const afterRedo = await page.evaluate(() => document.querySelectorAll('.clip').length);
 console.log('clips before/undo/redo', before, afterUndo, afterRedo);
 
+// Images: import a photo, add it, set how long it shows three ways, preview it.
+await stubDialogs(['photo_1200x800.jpg', 'half_transparent_400.png'].map((f) => path.join(mediaDir, f)), exportPath);
+await page.click('[data-command=import]');
+await page.waitForFunction(() => [...document.querySelectorAll('.media-card')].some((c) => c.textContent.includes('photo_1200x800')));
+await page.waitForFunction(() => window.cutncrop.store.project.media.filter((m) => m.isImage).every((m) => m.proxyPath), null, { timeout: 30_000 });
+const photoCard = page.locator('.media-card', { hasText: 'photo_1200x800' });
+console.log('image card:', (await photoCard.locator('.media-meta').textContent()).trim());
+await photoCard.dblclick();
+const imageClip = () => page.evaluate(() => {
+  const { store } = window.cutncrop;
+  const m = store.project.media.find((x) => x.name === 'photo_1200x800.jpg');
+  const c = store.project.tracks.find((t) => t.id === 'v1').clips.find((x) => x.mediaId === m.id);
+  return c && { start: c.start, length: +(c.out - c.in).toFixed(3), in: c.in };
+});
+console.log('image added (expect 5 s at the end):', JSON.stringify(await imageClip()));
+await page.fill('label.field:has-text("Show for") input', '3');
+await page.press('label.field:has-text("Show for") input', 'Enter');
+console.log('Show for = 3:', JSON.stringify(await imageClip()));
+await page.click('[data-command=zoomFit]');
+const imgEl = page.locator('.lane.video .clip', { hasText: 'photo_1200x800' });
+const handle = await imgEl.locator('.handle.out').boundingBox();
+const zoomImg = await page.evaluate(() => window.cutncrop.store.zoom);
+await page.mouse.move(handle.x + 4, handle.y + 10);
+await page.mouse.down();
+await page.mouse.move(handle.x + 4 + 1.5 * zoomImg, handle.y + 10, { steps: 6 });
+await page.mouse.up();
+console.log('dragged right edge +1.5 s:', JSON.stringify(await imageClip()));
+await imgEl.click({ button: 'right', position: { x: 20, y: 20 } });
+console.log('image clip menu:', JSON.stringify(await menuLabels()));
+await page.click('.context-item:has-text("10 seconds")');
+console.log('Show for 10 s from menu:', JSON.stringify(await imageClip()));
+const startImg = (await imageClip()).start;
+await page.evaluate((t) => window.cutncrop.store.setPlayhead(t), startImg + 1);
+await page.waitForTimeout(300);
+const imagePreview = () => page.evaluate(() => ({
+  image: !document.querySelector('.preview-image').hidden,
+  videoVisible: document.querySelector('video').style.visibility !== 'hidden',
+  mode: window.cutncrop.preview.clipMode,
+  playhead: +window.cutncrop.store.playhead.toFixed(2),
+}));
+console.log('preview on the image:', JSON.stringify(await imagePreview()));
+await ss('04e-image');
+await page.keyboard.press('Space');
+await page.waitForTimeout(1000);
+await page.keyboard.press('Space');
+console.log('after 1 s playing over the image:', JSON.stringify(await imagePreview()));
+
 // Export
 await page.click('[data-command=export]');
 await page.selectOption('select[name=quality]', 'draft');

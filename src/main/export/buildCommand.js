@@ -94,9 +94,19 @@ export function buildExportCommand(project, outPath, opts = {}) {
     `aformat=sample_fmts=fltp:channel_layouts=stereo,volume=${volume},` +
     `apad=whole_len=${samples},atrim=end_sample=${samples},asetpts=PTS-STARTPTS`;
 
-  /** Conform input i's video to the project format, exactly `frames` frames long. */
-  const normalizedVideo = (i, frames) =>
-    `[${i}:v:0]fps=fps=${R}:start_time=0,` +
+  /** A still image as an input that repeats its one frame for `dur` seconds. */
+  const addImageInput = (media, dur) => {
+    inputArgs.push('-loop', '1', '-framerate', R, '-t', (dur + 0.25).toFixed(6), '-i', media.path);
+    return inputIndex++;
+  };
+
+  /**
+   * Conform input i's video to the project format, exactly `frames` frames long.
+   * Images first get their transparency turned into black (premultiplied alpha);
+   * otherwise transparent pixels would show whatever colour they happen to store.
+   */
+  const normalizedVideo = (i, frames, { image = false } = {}) =>
+    `[${i}:v:0]${image ? 'format=rgba,premultiply=inplace=1,' : ''}fps=fps=${R}:start_time=0,` +
     `scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
     `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p,` +
     `tpad=stop_mode=clone:stop=${frames},trim=end_frame=${frames},setpts=PTS-STARTPTS`;
@@ -112,6 +122,9 @@ export function buildExportCommand(project, outPath, opts = {}) {
     const v = `v${k}`;
     if (seg.type === 'gap') {
       filters.push(`color=c=black:s=${W}x${H}:r=${R},format=yuv420p,setsar=1,trim=end_frame=${frames}[${v}]`);
+    } else if (findMedia(project, seg.clip.mediaId).isImage) {
+      const i = addImageInput(findMedia(project, seg.clip.mediaId), framesToSeconds(frames, fps));
+      filters.push(`${normalizedVideo(i, frames, { image: true })}[${v}]`);
     } else if (isReversed(seg.clip)) {
       // The segment shows the clip's forward frames 0..frames-1 (from `in`) backwards;
       // any skipped timeline start corresponds to the source end, which isn't used.

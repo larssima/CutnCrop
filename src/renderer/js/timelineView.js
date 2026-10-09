@@ -8,7 +8,7 @@ import { h, $, mediaUrl } from './util.js';
 import { getPeaks, PEAKS_PER_SECOND } from './media.js';
 import * as tl from '../../shared/timeline.js';
 import { EFFECTS, isReversed } from '../../shared/effects.js';
-import { floorToFrame, frameDuration, formatDuration } from '../../shared/time.js';
+import { formatDuration } from '../../shared/time.js';
 
 const SNAP_PX = 8;
 const DRAG_THRESHOLD_PX = 3;
@@ -153,7 +153,7 @@ export class TimelineView {
     }
     const track = trackId ? lane : media.hasVideo ? tl.videoTrack(project) : tl.audioTracks(project)[0];
     const fps = project.settings.fps;
-    const duration = floorToFrame(media.duration, fps) || frameDuration(fps);
+    const duration = tl.newClipDuration(project, media);
     const t = this.timeAt(clientX);
     if (track.type === 'audio') return { mediaId: media.id, trackId, at: this.snap(t), duration, insert: false };
     const over = tl.clipAt(project, t, track);
@@ -281,7 +281,14 @@ export class TimelineView {
 
     if (track.type === 'video') {
       const thumbs = h('div.clip-thumbs');
-      if (media?.thumbPath) {
+      if (media?.thumbPath && media.isImage) {
+        // A still: repeat its thumbnail along the clip.
+        Object.assign(thumbs.style, {
+          backgroundImage: `url("${mediaUrl(media.thumbPath)}")`,
+          backgroundSize: 'auto 100%',
+          backgroundRepeat: 'repeat-x',
+        });
+      } else if (media?.thumbPath) {
         // Map the thumbnail strip onto source time so frames line up with content.
         Object.assign(thumbs.style, {
           backgroundImage: `url("${mediaUrl(media.thumbPath)}")`,

@@ -15,6 +15,12 @@ MAJOR for incompatible project-file or behavior changes, MINOR for new features,
   when nothing is selected; Ctrl+Shift+V pastes at the playhead (splitting a clip under it);
   right-click empty lane space → Paste here. Pasting works across projects.
 - ↑ / ↓ jump the playhead to the previous / next cut between clips.
+- Images on the timeline (JPG, PNG, WebP, BMP, GIF, TIFF; HEIC if FFmpeg supports it).
+  New image clips show for a default 5 s (Project panel: "New images show for"); set the
+  length by dragging either edge, the "Show for" field, or the right-click menu (2/3/5/10 s).
+  Images are scaled to fit like video; PNG transparency becomes black.
+- Dragging a clip's left edge now stops at the previous clip instead of pushing it aside.
+- Project files are now schema v5 (`isImage` on media, `settings.imageDuration`).
 - Dragging a media file onto a video clip shows an insertion line at the clip's nearer edge
   and inserts it there; sound never pushes other clips (it goes to a lane with room).
 

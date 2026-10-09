@@ -91,6 +91,9 @@ export class Inspector {
       field('Frame rate', h('select', {
         onchange: (e) => store.edit((proj) => (proj.settings.fps = Number(e.target.value))),
       }, ...fpsOptions.map((r) => h('option', { value: r, selected: r === fps }, `${r} fps`)))),
+      field('New images show for (s)', numberInput(p.settings.imageDuration ?? 5, (v) => store.edit((proj) => {
+        proj.settings.imageDuration = Math.max(0.1, Math.min(3600, v));
+      }), { step: 0.5, min: 0.1 })),
       h('div.info-grid', {},
         h('span', {}, 'Duration'), h('span', {}, formatTimecode(tl.projectDuration(p), fps)),
         h('span', {}, 'Video clips'), h('span', {}, tl.videoTrack(p).clips.length),
@@ -128,9 +131,9 @@ export class Inspector {
         field('Fade in (s)', numberInput(clip.fadeIn, (v) => store.edit((proj) => tl.setClipFades(proj, clip.id, { fadeIn: v })), { step: 0.1 })),
         field('Fade out (s)', numberInput(clip.fadeOut, (v) => store.edit((proj) => tl.setClipFades(proj, clip.id, { fadeOut: v })), { step: 0.1 })),
       );
-    } else if (!media.hasAudio) {
+    } else if (!media.hasAudio && !media.isImage) {
       audioControls.push(h('p.hint', {}, 'This clip has no audio.'));
-    } else if (!audio) {
+    } else if (!audio && media.hasAudio) {
       audioControls.push(h('p.hint', {}, 'Unlinked — its sound is a separate clip on an audio track (or was deleted).'));
     }
     const linkNote = clip.linkId
@@ -147,7 +150,7 @@ export class Inspector {
     const setSourceOut = (v) => store.edit((proj) => (reversed
       ? tl.trimClip(proj, clip.id, 'in', clip.start + (clip.out - v))
       : tl.trimClip(proj, clip.id, 'out', clip.start + (v - clip.in))));
-    const effectToggles = effectsForTrack(track.type).map((fx) =>
+    const effectToggles = effectsForTrack(track.type, { isImage: media.isImage }).map((fx) =>
       h('label.checkbox', { title: fx.description },
         h('input', {
           type: 'checkbox', checked: hasEffect(clip, fx.type),
@@ -156,17 +159,27 @@ export class Inspector {
         `${fx.icon} ${fx.label}`,
         fx.linked && clip.linkId ? h('span.hint-inline', {}, isAudio ? ' (with its video)' : ' (with its sound)') : null));
 
-    this.show(isAudio ? `Audio clip · ${track.id.toUpperCase()}` : 'Video clip',
+    // Images have no in/out points: just how long they show.
+    const timing = media.isImage
+      ? [field('Show for (s)', numberInput(tl.clipDuration(clip), (v) => store.edit((proj) => tl.setImageDuration(proj, clip.id, v)), { step: 0.5, min: 0.04 }))]
+      : [
+          field('In point (s)', numberInput(clip.in, setSourceIn, { max: clip.out })),
+          field('Out point (s)', numberInput(clip.out, setSourceOut, { max: media.duration })),
+        ];
+    const sourceInfo = media.isImage
+      ? `Image ${media.width}×${media.height}`
+      : media.hasVideo ? `${media.width}×${media.height} @ ${media.fps}` : 'Audio file';
+
+    this.show(isAudio ? `Audio clip · ${track.id.toUpperCase()}` : media.isImage ? 'Image clip' : 'Video clip',
       h('div.inspector-name', { title: media.path }, media.name),
       linkNote,
       ...audioControls,
       effectToggles.length ? h('div.field', {}, h('span.field-label', {}, 'Effects'), ...effectToggles) : null,
       field('Start on timeline (s)', numberInput(clip.start, (v) => store.edit((proj) => tl.moveClip(proj, clip.id, v)))),
-      field('In point (s)', numberInput(clip.in, setSourceIn, { max: clip.out })),
-      field('Out point (s)', numberInput(clip.out, setSourceOut, { max: media.duration })),
+      ...timing,
       h('div.info-grid', {},
         h('span', {}, 'Duration'), h('span', {}, formatTimecode(tl.clipDuration(clip), fps)),
-        h('span', {}, 'Source'), h('span', {}, media.hasVideo ? `${media.width}×${media.height} @ ${media.fps}` : 'Audio file'),
+        h('span', {}, 'Source'), h('span', {}, sourceInfo),
       ),
       h('div.button-row', {},
         h('button', { onclick: () => store.emit('command', 'split') }, 'Split at playhead'),
@@ -200,14 +213,22 @@ export class Inspector {
     this.show('Media',
       h('div.inspector-name', {}, media.name),
       h('div.info-grid', {},
-        ...(media.hasVideo
+        ...(media.isImage
           ? [
+              h('span', {}, 'Type'), h('span', {}, 'Image'),
               h('span', {}, 'Resolution'), h('span', {}, `${media.width}×${media.height}`),
-              h('span', {}, 'Frame rate'), h('span', {}, `${media.fps} fps${media.vfr ? ' (variable)' : ''}`),
+              h('span', {}, 'Shows for'), h('span', {}, `${store.project.settings.imageDuration ?? 5} s when added (stretch on the timeline)`),
             ]
-          : [h('span', {}, 'Type'), h('span', {}, 'Audio file')]),
-        h('span', {}, 'Duration'), h('span', {}, formatDuration(media.duration)),
-        h('span', {}, 'Audio'), h('span', {}, media.hasAudio ? (media.audioChannels === 1 ? 'Mono' : 'Stereo') : 'None'),
+          : [
+              ...(media.hasVideo
+                ? [
+                    h('span', {}, 'Resolution'), h('span', {}, `${media.width}×${media.height}`),
+                    h('span', {}, 'Frame rate'), h('span', {}, `${media.fps} fps${media.vfr ? ' (variable)' : ''}`),
+                  ]
+                : [h('span', {}, 'Type'), h('span', {}, 'Audio file')]),
+              h('span', {}, 'Duration'), h('span', {}, formatDuration(media.duration)),
+              h('span', {}, 'Audio'), h('span', {}, media.hasAudio ? (media.audioChannels === 1 ? 'Mono' : 'Stereo') : 'None'),
+            ]),
         h('span', {}, 'Preview'), h('span', {}, media.proxyPath ? 'Proxy ready' : status.error ? 'Failed' : `Generating… ${Math.round((status.proxyProgress ?? 0) * 100)}%`),
       ),
       h('div.path', {}, media.path),

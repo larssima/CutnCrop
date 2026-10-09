@@ -40,6 +40,13 @@ export const TEST_MEDIA = {
     '-af', "volume='if(lt(mod(t\\,1)\\,0.05)\\,1\\,0)':eval=frame", '-c:a', 'pcm_s16le',
   ],
   'tone.mp3': [...tone(440, 6), '-c:a', 'libmp3lame', '-b:a', '128k'],
+  // Still images: a JPEG photo, a white PNG, and a PNG that is fully transparent on its left half.
+  'photo_1200x800.jpg': ['-f', 'lavfi', '-i', 'testsrc2=size=1200x800', '-frames:v', '1', '-q:v', '3'],
+  'white_400.png': ['-f', 'lavfi', '-i', 'color=c=white:size=400x400', '-frames:v', '1'],
+  'half_transparent_400.png': [
+    '-f', 'lavfi', '-i', 'color=c=white:size=400x400,format=rgba',
+    '-vf', "geq=r='255':g='255':b='255':a='if(lt(X\\,200)\\,0\\,255)'", '-frames:v', '1',
+  ],
   'webm_vp9_640.webm': [
     ...bars('640x360', 30, 4), ...tone(330, 4),
     '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '500k', '-c:a', 'libopus',

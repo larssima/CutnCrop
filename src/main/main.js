@@ -15,6 +15,7 @@ import { migrateProject } from '../shared/schema.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const VIDEO_EXTENSIONS = ['mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', 'wmv', 'mts', 'm2ts', 'mpg', 'mpeg', 'flv', '3gp'];
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'opus', 'wma', 'aif', 'aiff'];
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'tif', 'tiff', 'heic', 'heif'];
 const PROJECT_EXTENSION = 'cutncrop';
 
 let win = null;
@@ -35,7 +36,7 @@ const MIME = {
   '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/mp4', '.webm': 'video/webm',
   '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
   '.opus': 'audio/ogg', '.flac': 'audio/flac', '.aac': 'audio/aac',
-  '.jpg': 'image/jpeg', '.png': 'image/png',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
 };
 
 /** media://file/<encoded absolute path>, with HTTP Range support for video seeking. */
@@ -207,9 +208,10 @@ function registerIpc() {
       title: 'Import media',
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: 'Video and audio', extensions: [...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS] },
+        { name: 'Video, audio and images', extensions: [...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS, ...IMAGE_EXTENSIONS] },
         { name: 'Video', extensions: VIDEO_EXTENSIONS },
         { name: 'Audio', extensions: AUDIO_EXTENSIONS },
+        { name: 'Images', extensions: IMAGE_EXTENSIONS },
         { name: 'All files', extensions: ['*'] },
       ],
     });

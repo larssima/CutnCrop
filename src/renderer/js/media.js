@@ -23,8 +23,8 @@ export async function importPaths(paths, at = null, trackId = null) {
 
   let adopted = null;
   store.edit((p) => {
-    const firstVideo = media.find((m) => m.hasVideo);
-    if (firstVideo && !p.media.some((m) => m.hasVideo) && tl.videoTrack(p).clips.length === 0) {
+    const firstVideo = media.find((m) => m.hasVideo && !m.isImage); // photos don't set the format
+    if (firstVideo && !p.media.some((m) => m.hasVideo && !m.isImage) && tl.videoTrack(p).clips.length === 0) {
       // Like most editors: the first video clip defines the project format.
       p.settings.width = even(firstVideo.width);
       p.settings.height = even(firstVideo.height);
@@ -47,7 +47,7 @@ export async function importPaths(paths, at = null, trackId = null) {
 
 /** Ask the main process to create thumbnails and proxies. */
 export function prepare(mediaList) {
-  window.api.prepareMedia(mediaList.map(({ id, path, duration, hasVideo, hasAudio }) => ({ id, path, duration, hasVideo, hasAudio })));
+  window.api.prepareMedia(mediaList.map(({ id, path, duration, hasVideo, hasAudio, isImage }) => ({ id, path, duration, hasVideo, hasAudio, isImage })));
 }
 
 // Waveform peaks per media id: Uint8Array, PEAKS_PER_SECOND values per second.
@@ -137,12 +137,12 @@ export class MediaBin {
           ondragend: () => setDraggedMedia(null),
         },
           m.hasVideo
-            ? h('div.media-thumb', { style: m.thumbPath ? { backgroundImage: `url("${mediaUrl(m.thumbPath)}")` } : {} })
+            ? h(`div.media-thumb${m.isImage ? '.image' : ''}`, { style: m.thumbPath ? { backgroundImage: `url("${mediaUrl(m.thumbPath)}")` } : {} })
             : h('div.media-thumb.audio', {}, '♪'),
           h('div.media-info', {},
             h('div.media-name', {}, m.name),
             h('div.media-meta', {}, m.hasVideo
-              ? `${m.width}×${m.height} · ${m.fps} fps · ${formatDuration(m.duration)}`
+              ? m.isImage ? `Image · ${m.width}×${m.height}` : `${m.width}×${m.height} · ${m.fps} fps · ${formatDuration(m.duration)}`
               : `Audio · ${formatDuration(m.duration)}`),
             h('div.media-badges', {},
               used ? h('span.badge', {}, 'in use') : null,

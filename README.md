@@ -81,6 +81,14 @@ linked, unlinked and moved audio against the flashes, the mix level, fades and m
 - Drag the round handles at the top corners of an audio clip to set fade in/out.
 - The speaker buttons in the track headers mute a whole track.
 
+## Images
+
+Import JPG, PNG, WebP, BMP, GIF, TIFF (and HEIC if your FFmpeg build reads it) like any
+other file; images go on the video lane. A new image clip shows for 5 s by default
+(change it in the Project panel). Set how long it shows by dragging either edge, typing in
+the **Show for** field, or right-click → **Show for** 2/3/5/10 s. Images are scaled to fit the
+frame like video; transparent areas become black.
+
 ## Effects
 
 Right-click a clip → **Effects** (or use the Effects checkboxes in the right-hand panel).

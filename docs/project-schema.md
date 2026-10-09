@@ -1,4 +1,4 @@
-# Project file schema (v4)
+# Project file schema (v5)
 
 A project is saved as JSON with the `.cutncrop` extension. It is the single
 source of truth: the UI, the preview and the exporter all read from it.
@@ -6,8 +6,8 @@ Code: `src/shared/schema.js` (creation, validation, migration).
 
 ```json
 {
-  "version": 4,
-  "settings": { "width": 1920, "height": 1080, "fps": 30, "sampleRate": 48000 },
+  "version": 5,
+  "settings": { "width": 1920, "height": 1080, "fps": 30, "sampleRate": 48000, "imageDuration": 5 },
   "media": [
     {
       "id": "m…", "path": "C:/clips/a.mp4", "name": "a.mp4", "duration": 12.5,
@@ -16,7 +16,9 @@ Code: `src/shared/schema.js` (creation, validation, migration).
       "proxyPath": "…/cache/…-proxy.mp4", "thumbPath": "…/cache/…-thumbs.jpg", "peaksPath": "…/cache/…-peaks.bin"
     },
     { "id": "m…", "path": "C:/music/song.mp3", "name": "song.mp3", "duration": 180.2,
-      "hasVideo": false, "hasAudio": true, "audioChannels": 2, "fps": null, "width": 0, "height": 0 }
+      "hasVideo": false, "hasAudio": true, "audioChannels": 2, "fps": null, "width": 0, "height": 0 },
+    { "id": "m…", "path": "C:/photos/p.jpg", "name": "p.jpg", "isImage": true, "duration": null,
+      "hasVideo": true, "hasAudio": false, "audioChannels": 0, "fps": null, "width": 4000, "height": 3000 }
   ],
   "tracks": [
     { "id": "v1", "type": "video",
@@ -54,6 +56,8 @@ Code: `src/shared/schema.js` (creation, validation, migration).
 | `settings.width/height` | Output resolution in pixels. Must be even (H.264). |
 | `settings.fps` | Output frame rate. NTSC rates are written as 29.97, 23.976, 59.94 and treated as exact 30000/1001 etc. |
 | `settings.sampleRate` | Output audio rate (Hz). |
+| `settings.imageDuration` | Seconds a newly placed image shows (default 5). |
+| `media[].isImage` | A still image: no length of its own (`duration: null`); its clips have `in = 0` and `out` = how long it shows. Goes on the video track only; effects like `reverse` don't apply. |
 | `media[].hasVideo/hasAudio` | Which streams the file has. Audio-only files can only go on audio tracks. |
 | `media[].audioChannels` | Source channel count. Mono is duplicated to both output channels at full level. |
 | `media[].width/height` | Display size, after rotation metadata is applied (phone video). 0 for audio files. |
@@ -89,6 +93,7 @@ Bump `SCHEMA_VERSION` for incompatible changes and add a step to
 `migrateProject()`. Files from a newer version are refused rather than
 misread. Update this document and `PROJECT_BRIEF.md` with every change.
 
+- **v5**: still images (`media.isImage`, `settings.imageDuration`). Older files get `isImage: false`.
 - **v4**: clip `effects` (first effect: `reverse`). Older files get `effects: []` on every clip.
 - **v3**: a video clip's sound is a linked audio clip (`linkId`) instead of part of the video clip.
   Video clips lose `volume`/`audioMuted`, the video track loses `muted`, audio clips gain `muted`.

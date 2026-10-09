@@ -11,6 +11,7 @@ export const EFFECTS = {
     tracks: ['video', 'audio'],
     // Applied to a clip and its linked partners together, so picture and sound stay in sync.
     linked: true,
+    images: false, // a still image looks the same backwards
   },
 };
 
@@ -20,10 +21,10 @@ export function hasEffect(clip, type) {
 
 export const isReversed = (clip) => hasEffect(clip, 'reverse');
 
-/** Effects that can be used on a clip on a track of this type. */
-export function effectsForTrack(trackType) {
+/** Effects that can be used on a clip on a track of this type (and, if `isImage`, on a still image). */
+export function effectsForTrack(trackType, { isImage = false } = {}) {
   return Object.entries(EFFECTS)
-    .filter(([, def]) => def.tracks.includes(trackType))
+    .filter(([, def]) => def.tracks.includes(trackType) && (!isImage || def.images))
     .map(([type, def]) => ({ type, ...def }));
 }
 

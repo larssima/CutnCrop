@@ -3,13 +3,14 @@
 
 import { EFFECTS } from './effects.js';
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const DEFAULT_SETTINGS = Object.freeze({
   width: 1920,
   height: 1080,
   fps: 30,
   sampleRate: 48000,
+  imageDuration: 5, // seconds a newly placed image shows
 });
 
 export const DEFAULT_TEXT_STYLE = Object.freeze({
@@ -49,7 +50,8 @@ export function createMedia(info) {
     id: newId('m'),
     path: info.path,
     name: info.name,
-    duration: info.duration,
+    isImage: Boolean(info.isImage),
+    duration: info.isImage ? null : info.duration, // images have no length of their own
     hasVideo: info.hasVideo !== false,
     hasAudio: info.hasAudio,
     audioChannels: info.audioChannels ?? (info.hasAudio ? 2 : 0),
@@ -105,6 +107,8 @@ export function migrateProject(project) {
   if ((project.version ?? 1) < 3) migrateLinkedAudio(p);
   // v3 -> v4: clip effects.
   for (const track of p.tracks) for (const clip of track.clips ?? []) clip.effects ??= [];
+  // v4 -> v5: still images (media.isImage); settings.imageDuration comes from the defaults.
+  for (const m of p.media) m.isImage ??= false;
   p.version = SCHEMA_VERSION;
   return p;
 }
@@ -176,6 +180,7 @@ export function validateProject(project) {
       for (const e of c.effects ?? []) {
         if (!EFFECTS[e.type]) errors.push(`Clip ${c.id} has unknown effect "${e.type}"`);
         else if (!EFFECTS[e.type].tracks.includes(track.type)) errors.push(`Effect "${e.type}" can't be used on a ${track.type} clip`);
+        else if (m?.isImage && !EFFECTS[e.type].images) errors.push(`Effect "${e.type}" can't be used on an image`);
       }
       if (c.linkId) {
         const group = links.get(c.linkId) ?? [];

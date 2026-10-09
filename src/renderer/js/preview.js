@@ -24,6 +24,7 @@ export class Preview {
     this.overlay = $('.text-overlay', root);
     this.message = $('.preview-message', root);
     this.note = $('.preview-note', root);
+    this.image = $('.preview-image', root);
     this.clipMode = 'forward'; // 'forward' | 'reverse-file' | 'reverse-step' for the clip under the playhead
     this.sourceBadge = $('.source-badge', root);
     this.sourceBar = $('.source-bar', root);
@@ -87,7 +88,7 @@ export class Preview {
     if (this.playing) this.pause();
     const media = this.sourceMedia();
     this.sourceBadge.hidden = !media;
-    this.sourceBar.hidden = !media;
+    this.sourceBar.hidden = !media || media.isImage;
     if (media) this.sourceBadge.querySelector('.source-name').textContent = media.name;
     this.fitFrame();
     this.renderSourceBar();
@@ -96,7 +97,7 @@ export class Preview {
 
   renderSourceBar() {
     const media = this.sourceMedia();
-    if (media) this.sourceFill.style.width = `${(store.source.time / media.duration) * 100}%`;
+    if (media && !media.isImage) this.sourceFill.style.width = `${(store.source.time / media.duration) * 100}%`;
   }
 
   /** Size the frame to the project (or source file) aspect ratio inside the available area. */
@@ -117,6 +118,7 @@ export class Preview {
 
   play() {
     const media = this.sourceMedia();
+    if (media?.isImage) return; // a still has nothing to play
     if (media) {
       if (store.source.time >= media.duration - 0.05) store.setSourceTime(0);
     } else {
@@ -169,8 +171,8 @@ export class Preview {
       // Don't skip over the start of the next clip.
       const next = sortedClips(project).find((c) => c.start > store.playhead);
       if (next && t > next.start) t = next.start;
-    } else if (this.clipMode === 'reverse-step') {
-      t += dt; // reversed preview not ready: frames are stepped to the wall clock
+    } else if (this.clipMode === 'reverse-step' || this.clipMode === 'image') {
+      t += dt; // stills and not-yet-ready reversed previews follow the wall clock
     } else if (this.videoReady()) {
       // A reversed preview file starts at the clip start; a source file at `in`.
       t = clip.start + (this.clipMode === 'reverse-file' ? this.video.currentTime : this.video.currentTime - clip.in);
@@ -217,6 +219,7 @@ export class Preview {
 
     if (!clip) {
       this.video.style.visibility = 'hidden';
+      this.showImage(null);
       this.showMessage(null);
       this.showNote(null);
       this.clipMode = 'forward';
@@ -224,6 +227,15 @@ export class Preview {
       return;
     }
     const media = findMedia(project, clip.mediaId);
+    if (media.isImage) {
+      this.clipMode = 'image';
+      this.showNote(null);
+      this.video.style.visibility = 'hidden';
+      if (!this.video.paused) this.video.pause();
+      this.showImage(media);
+      return;
+    }
+    this.showImage(null);
     const src = this.sourceFor(media);
     if (!src) {
       this.video.style.visibility = 'hidden';
@@ -291,6 +303,14 @@ export class Preview {
     this.showNote(null);
     this.clipMode = 'forward';
     this.lastTextKey = null;
+    if (media.isImage) {
+      this.audio.stopAll();
+      this.video.style.visibility = 'hidden';
+      if (!this.video.paused) this.video.pause();
+      this.showImage(media);
+      return;
+    }
+    this.showImage(null);
     this.audio.stopAll();
 
     const src = this.sourceFor(media);
@@ -347,6 +367,29 @@ export class Preview {
   showMessage(text) {
     this.message.textContent = text ?? '';
     this.message.hidden = !text;
+  }
+
+  /**
+   * Show a still image (its preview copy, which matches the export: orientation,
+   * transparency as black), or hide the image layer with null.
+   */
+  showImage(media) {
+    if (!media) {
+      this.image.hidden = true;
+      return;
+    }
+    if (!media.proxyPath) {
+      this.image.hidden = true;
+      this.showMessage('Preparing image…');
+      return;
+    }
+    this.showMessage(null);
+    const url = mediaUrl(media.proxyPath);
+    if (this.image.dataset.src !== url) {
+      this.image.dataset.src = url;
+      this.image.src = url;
+    }
+    this.image.hidden = false;
   }
 
   /** Small corner note that doesn't hide the picture. */

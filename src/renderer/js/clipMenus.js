@@ -80,7 +80,7 @@ function clipItems(id, run) {
     !isVideo && { label: 'Fade out 1 s', action: () => fade({ fadeOut: 1 }) },
     !isVideo && { label: 'Remove fades', disabled: !hasFades, action: () => fade({ fadeIn: 0, fadeOut: 0 }) },
     '-',
-    ...effectItems(clip, isVideo ? 'video' : 'audio'),
+    ...(media.isImage ? imageDurationItems(clip) : effectItems(clip, isVideo ? 'video' : 'audio')),
     '-',
     { label: 'Go to clip start', action: () => store.setPlayhead(clip.start) },
     { label: 'Go to clip end', action: () => store.setPlayhead(end) },
@@ -92,6 +92,19 @@ function clipItems(id, run) {
       : { label: 'Delete', shortcut: 'Del', danger: true, action: () => deleteClip(id, undefined) },
     linkedVideo && { label: 'Delete video only', shortcut: 'Ctrl+click, Del', danger: true, action: () => deleteClip(id, false) },
     isVideo && { label: 'Ripple delete', shortcut: 'Shift+Del', danger: true, action: () => run('rippleDelete') },
+  ];
+}
+
+/** Quick lengths for an image clip; any length can be dragged or typed in the panel. */
+function imageDurationItems(clip) {
+  const current = tl.clipDuration(clip);
+  return [
+    { heading: 'Show for' },
+    ...[2, 3, 5, 10].map((s) => ({
+      label: `${s} seconds`,
+      checked: Math.abs(current - s) < 1e-3,
+      action: () => store.edit((p) => tl.setImageDuration(p, clip.id, s)),
+    })),
   ];
 }
 

@@ -23,6 +23,13 @@ function rotationOf(stream) {
   return Number(stream.tags?.rotate ?? 0);
 }
 
+function isStillImage(format, video) {
+  const name = format.format_name ?? '';
+  if (name === 'image2' || name.endsWith('_pipe')) return true;
+  // e.g. a one-frame GIF; animated GIFs and real video have many frames.
+  return Number(video.nb_frames) === 1;
+}
+
 export async function probe(filePath) {
   const json = await runFfprobe([
     '-v', 'error',
@@ -35,6 +42,26 @@ export async function probe(filePath) {
   const video = data.streams.find((s) => s.codec_type === 'video' && s.disposition?.attached_pic !== 1);
   const audio = data.streams.find((s) => s.codec_type === 'audio');
   if (!video && !audio) throw new Error(`${path.basename(filePath)} has no video or audio stream`);
+
+  // Still images: an image format (image2, png_pipe, webp_pipe, …) or a single
+  // frame. They have no length of their own; clips set how long they show.
+  if (video && !audio && isStillImage(data.format, video)) {
+    const rotated = Math.abs(rotationOf(video)) % 180 === 90;
+    return {
+      path: filePath,
+      name: path.basename(filePath),
+      isImage: true,
+      duration: null,
+      hasVideo: true,
+      hasAudio: false,
+      audioChannels: 0,
+      fps: null,
+      width: rotated ? video.height : video.width,
+      height: rotated ? video.width : video.height,
+      videoCodec: video.codec_name,
+      container: data.format.format_name,
+    };
+  }
 
   const duration = Number(data.format.duration ?? video?.duration ?? audio?.duration ?? 0);
   if (!(duration > 0)) throw new Error(`${path.basename(filePath)} has no readable duration`);

@@ -65,7 +65,7 @@ export const SHORTCUTS = [
       ['Click video clip', 'Select it with its sound'],
       ['Ctrl+click video clip', 'Select the video only'],
       ['Drag clip', 'Move (snaps to playhead and clip edges)'],
-      ['Drag clip edge', 'Trim'],
+      ['Drag clip edge', 'Trim (an image clip: set how long it shows)'],
       ['Drag sound clip up/down', 'Move it to another audio lane'],
       ['Drag round handles on sound clip', 'Fade in / fade out'],
       ['Click / drag the ruler', 'Move the playhead / scrub'],
