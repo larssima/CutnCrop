@@ -3,7 +3,7 @@
 All notable changes to CutnCrop. Versions follow [semantic versioning](https://semver.org):
 MAJOR for incompatible project-file or behavior changes, MINOR for new features, PATCH for fixes.
 
-## Unreleased
+## 0.3.1 — 2026-10-09
 
 - Fix: playback stalled (the picture jumped back and forth) at the end of a clip that
   ends where its file ends — always the case for reversed clips, and for untrimmed clips.
