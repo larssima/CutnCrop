@@ -1,7 +1,7 @@
 {
   "name": "cutncrop",
   "productName": "CutnCrop",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Desktop video editor for Windows",
   "license": "GPL-3.0-or-later",
   "repository": "github:larssima/CutnCrop",
