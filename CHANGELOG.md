@@ -3,6 +3,15 @@
 All notable changes to CutnCrop. Versions follow [semantic versioning](https://semver.org):
 MAJOR for incompatible project-file or behavior changes, MINOR for new features, PATCH for fixes.
 
+## Unreleased
+
+- **Transform → Crop** for video and image clips. The kept area zooms to fill the frame.
+  Crop on the preview (C, or right-click → Crop on preview…: drag edges/corners, drag inside
+  to move, Enter/Esc when done), type the edges in the Transform section of the right-hand
+  panel, or use "Crop to fill frame" (removes black bars) and "Reset crop". Cropped clips
+  show ⛶ on the timeline; export and preview match.
+- Project files are now schema v6 (`transform` on video-track clips).
+
 ## 0.3.1 — 2026-10-09
 
 - Fix: playback stalled (the picture jumped back and forth) at the end of a clip that

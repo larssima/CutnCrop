@@ -89,6 +89,18 @@ other file; images go on the video lane. A new image clip shows for 5 s by defau
 the **Show for** field, or right-click → **Show for** 2/3/5/10 s. Images are scaled to fit the
 frame like video; transparent areas become black.
 
+## Transform: crop
+
+Every video and image clip has a **Transform** section (right-hand panel) — built-in settings
+for how the picture sits in the frame, separate from optional Effects. So far: **Crop**. The kept
+area is zoomed to fill the frame.
+
+- **C** (or right-click → **Crop on preview…**): drag the edges or corners on the preview, drag
+  inside to move the crop; Enter or Esc when done.
+- Type how much (%) to remove from each edge in the Transform section.
+- **Crop to fill frame** crops to the project's shape, so there are no black bars; **Reset crop**
+  undoes it. Cropped clips show ⛶ on the timeline.
+
 ## Effects
 
 Right-click a clip → **Effects** (or use the Effects checkboxes in the right-hand panel).
@@ -112,6 +124,7 @@ Right-click a clip, text item or media file for a menu of everything you can do 
 | Home / End | Go to start / end |
 | S | Split at playhead |
 | T | Add text at playhead |
+| C | Crop the selected video/image clip on the preview |
 | Ctrl+C / Ctrl+X | Copy / cut the selected clip (a video clip comes with its sound) or text |
 | Ctrl+V | Paste right after the selected clip, or at the end of the timeline if nothing is selected |
 | Ctrl+Shift+V | Paste at the playhead (a clip under it is split) |

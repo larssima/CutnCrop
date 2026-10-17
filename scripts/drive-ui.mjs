@@ -403,6 +403,51 @@ await page.waitForTimeout(1000);
 await page.keyboard.press('Space');
 console.log('after 1 s playing over the image:', JSON.stringify(await imagePreview()));
 
+// Transform: crop the photo on the preview, by number, and a video by "Crop to fill frame".
+const cropOfClip = (name) => page.evaluate((name) => {
+  const { store } = window.cutncrop;
+  const m = store.project.media.find((x) => x.name === name);
+  const c = store.project.tracks.find((t) => t.id === 'v1').clips.find((x) => x.mediaId === m.id);
+  return c.transform.crop;
+}, name);
+await imgEl.click({ position: { x: 20, y: 20 } });
+await page.keyboard.press('c');
+const overlay = page.locator('.crop-overlay');
+console.log('crop mode:', JSON.stringify({ overlay: await overlay.isVisible(), bar: await page.locator('.crop-bar').isVisible() }));
+const ov = await overlay.boundingBox();
+const dragHandle = async (sel, dx, dy) => {
+  const b = await page.locator(sel).boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2 + dx, b.y + b.height / 2 + dy, { steps: 6 });
+  await page.mouse.up();
+};
+await dragHandle('.crop-handle.w', ov.width * 0.25, 0);
+console.log('dragged left edge 25%:', JSON.stringify(await cropOfClip('photo_1200x800.jpg')));
+await dragHandle('.crop-handle.nw', 0, ov.height * 0.2);
+console.log('dragged top-left corner down 20%:', JSON.stringify(await cropOfClip('photo_1200x800.jpg')));
+const boxNow = await page.locator('.crop-box').boundingBox();
+await page.mouse.move(boxNow.x + boxNow.width / 2, boxNow.y + boxNow.height / 2);
+await page.mouse.down();
+await page.mouse.move(boxNow.x + boxNow.width / 2 - ov.width * 0.1, boxNow.y + boxNow.height / 2, { steps: 6 });
+await page.mouse.up();
+console.log('moved the crop 10% left:', JSON.stringify(await cropOfClip('photo_1200x800.jpg')));
+await ss('04f-crop-mode');
+await page.keyboard.press('Enter');
+console.log('after Enter:', JSON.stringify(await page.evaluate(() => ({
+  cropMode: window.cutncrop.store.cropEdit,
+  overlay: !document.querySelector('.crop-overlay').hidden,
+  imageClip: document.querySelector('.preview-image').style.clipPath,
+  marks: document.querySelectorAll('.transform-mark').length,
+}))));
+await ss('04g-cropped');
+await page.fill('label.crop-field:has-text("Right") input', '10');
+await page.press('label.crop-field:has-text("Right") input', 'Enter');
+console.log('Right = 10 % in the panel:', JSON.stringify(await cropOfClip('photo_1200x800.jpg')));
+await page.click('.lane.video .clip:nth-child(3)', { button: 'right', position: { x: 30, y: 20 } }); // vertical 360x640
+await page.click('.context-item:has-text("Crop to fill frame")');
+console.log('vertical clip, Crop to fill frame (16:9 project):', JSON.stringify(await cropOfClip('vertical_360x640.mp4')));
+
 // Export
 await page.click('[data-command=export]');
 await page.selectOption('select[name=quality]', 'draft');

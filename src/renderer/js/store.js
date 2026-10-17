@@ -23,6 +23,8 @@ class Store extends EventTarget {
     // Source monitor: when set, the preview shows a media file on its own
     // ({ mediaId, time }) instead of the timeline.
     this.source = null;
+    // Crop mode: id of the clip whose crop is being dragged on the preview.
+    this.cropEdit = null;
     this.zoom = 60; // timeline pixels per second
     this.mediaStatus = new Map(); // mediaId -> { proxyProgress, error }
     this.undoStack = [];
@@ -47,6 +49,7 @@ class Store extends EventTarget {
     this.redoStack = [];
     this.selection = null;
     this.source = null;
+    this.cropEdit = null;
     this.playhead = 0;
     this.mediaStatus.clear();
     this.setDirty(false);
@@ -146,8 +149,16 @@ class Store extends EventTarget {
     if (!exists) this.select(null);
   }
 
+  /** Enter (clip id) or leave (null) crop mode. */
+  setCropEdit(clipId) {
+    if (this.cropEdit === clipId) return;
+    this.cropEdit = clipId;
+    this.emit('crop-edit');
+  }
+
   /** Show a media file in the preview (source monitor). */
   openSource(mediaId) {
+    this.setCropEdit(null);
     if (this.source?.mediaId === mediaId) return;
     this.source = { mediaId, time: 0 };
     this.emit('source');
@@ -172,6 +183,8 @@ class Store extends EventTarget {
   select(selection) {
     // Selecting anything on the timeline leaves the source monitor.
     if (selection && selection.kind !== 'media') this.closeSource();
+    // Selecting something else ends crop mode.
+    if (this.cropEdit && selection?.id !== this.cropEdit) this.setCropEdit(null);
     const same =
       selection?.id === this.selection?.id &&
       selection?.kind === this.selection?.kind &&

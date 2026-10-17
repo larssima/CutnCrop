@@ -4,6 +4,7 @@ import { store } from './store.js';
 import { h, $ } from './util.js';
 import * as tl from '../../shared/timeline.js';
 import { effectsForTrack, hasEffect, isReversed } from '../../shared/effects.js';
+import { cropOf, hasCrop } from '../../shared/transform.js';
 import { formatTimecode, formatDuration } from '../../shared/time.js';
 
 const RESOLUTIONS = [
@@ -55,6 +56,7 @@ export class Inspector {
       const editing = this.root.contains(active) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) && active.type !== 'checkbox';
       if (!editing) this.render();
     });
+    store.on('crop-edit', () => this.render());
     store.on('media-status', () => {
       if (store.selection?.kind === 'media') this.render();
     });
@@ -174,6 +176,7 @@ export class Inspector {
       h('div.inspector-name', { title: media.path }, media.name),
       linkNote,
       ...audioControls,
+      isAudio ? null : this.transformSection(clip),
       effectToggles.length ? h('div.field', {}, h('span.field-label', {}, 'Effects'), ...effectToggles) : null,
       field('Start on timeline (s)', numberInput(clip.start, (v) => store.edit((proj) => tl.moveClip(proj, clip.id, v)))),
       ...timing,
@@ -187,6 +190,26 @@ export class Inspector {
           ? h('button', { onclick: () => store.emit('command', 'unlink'), title: 'Edit video and audio separately (D)' }, 'Unlink')
           : null,
         h('button.danger', { onclick: () => store.emit('command', 'delete') }, 'Delete'),
+      ),
+    );
+  }
+
+  /** Transform: crop as % of the picture removed from each edge, plus crop mode and presets. */
+  transformSection(clip) {
+    const crop = cropOf(clip);
+    const edge = (key, label) =>
+      h('label.crop-field', {},
+        h('span', {}, label),
+        numberInput(crop[key] * 100, (v) => store.edit((p) => tl.setCrop(p, clip.id, { [key]: v / 100 }, key)), { step: 1, min: 0, max: 95 }));
+    const editing = store.cropEdit === clip.id;
+    return h('div.field.transform', {},
+      h('span.field-label', {}, 'Transform · Crop (% removed)'),
+      h('div.crop-grid', {}, edge('left', 'Left'), edge('right', 'Right'), edge('top', 'Top'), edge('bottom', 'Bottom')),
+      h('div.button-row', {},
+        h(`button${editing ? '.primary' : ''}`, { onclick: () => store.emit('command', 'cropMode'), title: 'Drag the crop on the preview (C)' },
+          editing ? 'Done cropping' : 'Crop on preview'),
+        h('button', { onclick: () => store.emit('command', 'cropFill'), title: 'Crop to the frame shape: no black bars' }, 'Fill frame'),
+        h('button', { onclick: () => store.emit('command', 'cropReset'), disabled: !hasCrop(clip) }, 'Reset'),
       ),
     );
   }

@@ -9,6 +9,10 @@
 
 import { newId, DEFAULT_TEXT_STYLE } from './schema.js';
 import { EFFECTS, hasEffect, isReversed, sourceTimeAt, cloneEffects } from './effects.js';
+import { defaultTransform, normalizeCrop, fillFrameCrop } from './transform.js';
+
+/** `{ transform: <copy> }` for clips that have one, `{}` otherwise (spread into a new clip). */
+const cloneTransform = (clip) => (clip.transform ? { transform: structuredClone(clip.transform) } : {});
 import { snapToFrame, floorToFrame, frameDuration, round6 } from './time.js';
 
 export const videoTrack = (project) => project.tracks.find((t) => t.type === 'video');
@@ -247,7 +251,7 @@ export function addClip(project, mediaId, start = null, trackId = null) {
     return clip;
   }
 
-  const clip = { ...timing, effects: [], id: newId('c') };
+  const clip = { ...timing, effects: [], transform: defaultTransform(), id: newId('c') };
   track.clips.push(clip);
   // Settle the video clip first, so its sound goes where there is room at its final position.
   resolveOverlaps(project, [clip.id]);
@@ -344,7 +348,7 @@ export function splitClip(project, clipId, t) {
   let result = null;
   for (const c of group) {
     const splitSource = round6(sourceTimeAt(c, t - c.start));
-    const right = { ...c, id: newId('c'), start: t, effects: cloneEffects(c.effects) };
+    const right = { ...c, id: newId('c'), start: t, effects: cloneEffects(c.effects), ...cloneTransform(c) };
     if (newLink) right.linkId = newLink;
     if (isImageClip(project, c)) {
       // Both halves show the same image: just divide the length.
@@ -610,7 +614,7 @@ export function duplicateClip(project, clipId) {
   const start = clipEnd(clip);
   let result = null;
   for (const c of group) {
-    const copy = { ...c, id: newId('c'), start, effects: cloneEffects(c.effects) };
+    const copy = { ...c, id: newId('c'), start, effects: cloneEffects(c.effects), ...cloneTransform(c) };
     if (newLink) copy.linkId = newLink;
     trackOfClip(project, c.id).clips.push(copy);
     if (c === clip) result = copy;
@@ -660,6 +664,30 @@ export function unlinkClip(project, clipId) {
 }
 
 /** Fade lengths in seconds, kept within the clip. Audio clips only. */
+/**
+ * Set a video or image clip's crop (fractions removed from each edge). Values are
+ * clamped so at least a sliver stays visible; `keep` names the edge being dragged,
+ * which wins when opposite edges collide.
+ */
+export function setCrop(project, clipId, crop, keep = null) {
+  const clip = findClip(project, clipId);
+  if (trackOfClip(project, clipId)?.type !== 'video') throw new Error('Only video and image clips can be cropped');
+  clip.transform ??= defaultTransform();
+  clip.transform.crop = normalizeCrop({ ...clip.transform.crop, ...crop }, keep);
+}
+
+/** Crop a clip to the project's frame shape so it fills the frame without black bars. */
+export function cropToFillFrame(project, clipId) {
+  const clip = findClip(project, clipId);
+  const media = findMedia(project, clip.mediaId);
+  const { width, height } = project.settings;
+  setCrop(project, clipId, fillFrameCrop(media.width, media.height, width, height));
+}
+
+export function resetCrop(project, clipId) {
+  setCrop(project, clipId, defaultTransform().crop);
+}
+
 /** How long an image clip shows (seconds, snapped to frames). The start stays put. */
 export function setImageDuration(project, clipId, seconds) {
   const clip = findClip(project, clipId);

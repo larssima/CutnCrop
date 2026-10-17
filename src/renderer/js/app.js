@@ -69,6 +69,14 @@ function clipToSplit() {
   return tl.clipAt(store.project, t);
 }
 
+/** The selected video or image clip (the only kind that can be cropped), else a hint. */
+function croppableClip() {
+  const clip = selectedClip();
+  if (clip && tl.trackOfClip(store.project, clip.id).type === 'video') return clip;
+  toast('Select a video or image clip on the video lane to crop it.');
+  return null;
+}
+
 /** Move the playhead to the previous (-1) or next (+1) cut between clips. */
 function jumpToCut(dir) {
   preview.pause();
@@ -183,6 +191,24 @@ const commands = {
   start: () => (store.source ? store.setSourceTime(0) : store.setPlayhead(0)),
   end: () => (store.source ? store.setSourceTime(sourceMedia().duration) : store.setPlayhead(tl.projectDuration(store.project))),
   closeSource: () => store.closeSource(),
+  escape: () => (store.cropEdit ? store.setCropEdit(null) : store.closeSource()),
+  cropMode: () => {
+    const clip = croppableClip();
+    if (!clip) return;
+    preview.pause();
+    // Show the clip being cropped: move the playhead into it if it's elsewhere.
+    const end = tl.clipEnd(clip);
+    if (store.playhead < clip.start || store.playhead >= end) store.setPlayhead(Math.min(clip.start + 0.5, (clip.start + end) / 2));
+    store.setCropEdit(store.cropEdit === clip.id ? null : clip.id);
+  },
+  cropFill: () => {
+    const clip = croppableClip();
+    if (clip) store.edit((p) => tl.cropToFillFrame(p, clip.id));
+  },
+  cropReset: () => {
+    const clip = croppableClip();
+    if (clip) store.edit((p) => tl.resetCrop(p, clip.id));
+  },
   prevFrame: () => step(-1),
   nextFrame: () => step(1),
 };
@@ -235,7 +261,8 @@ document.addEventListener('keydown', (e) => {
     ' ': 'play', k: 'play',
     s: 'split', t: 'addText', d: 'unlink', m: 'toggleMute',
     Delete: e.shiftKey ? 'rippleDelete' : 'delete', Backspace: 'delete',
-    Home: 'start', End: 'end', Escape: 'closeSource', '?': 'shortcuts',
+    Home: 'start', End: 'end', Escape: 'escape', '?': 'shortcuts', c: 'cropMode',
+    Enter: store.cropEdit ? 'escape' : undefined,
     '+': 'zoomIn', '=': 'zoomIn', '-': 'zoomOut', '\\': 'zoomFit',
   };
   if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {

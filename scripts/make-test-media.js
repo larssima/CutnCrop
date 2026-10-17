@@ -47,6 +47,14 @@ export const TEST_MEDIA = {
     '-f', 'lavfi', '-i', 'color=c=white:size=400x400,format=rgba',
     '-vf', "geq=r='255':g='255':b='255':a='if(lt(X\\,200)\\,0\\,255)'", '-frames:v', '1',
   ],
+  // Four colored quadrants (red TL, green TR, blue BL, white BR) for crop tests.
+  'quadrants_400.png': [
+    '-f', 'lavfi', '-i', 'color=c=black:size=400x400,format=rgb24',
+    '-vf', "geq=r='255*(lt(X\\,200)*lt(Y\\,200)+gte(X\\,200)*gte(Y\\,200))'"
+      + ":g='255*(gte(X\\,200)*lt(Y\\,200)+gte(X\\,200)*gte(Y\\,200))'"
+      + ":b='255*(lt(X\\,200)*gte(Y\\,200)+gte(X\\,200)*gte(Y\\,200))'",
+    '-frames:v', '1',
+  ],
   'webm_vp9_640.webm': [
     ...bars('640x360', 30, 4), ...tone(330, 4),
     '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '500k', '-c:a', 'libopus',

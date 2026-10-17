@@ -25,6 +25,36 @@ test('probe recognizes still images (and keeps animated video as video)', { skip
   assert.equal(video.isImage, undefined);
 });
 
+test('crop keeps the chosen area and zooms it to fill the frame', { skip }, async () => {
+  // Quadrants: red TL, green TR, blue BL, white BR. Frame 320x240; a square area
+  // fills the 240x240 center (x 40..280).
+  const p = newProject({ width: 320, height: 240, fps: 30 });
+  const quad = tl.addMedia(p, await mediaFrom(clipPath('quadrants_400.png')));
+  const photo = tl.addMedia(p, await mediaFrom(clipPath('photo_1200x800.jpg')));
+  const white = tl.addClip(p, quad.id);
+  tl.setImageDuration(p, white.id, 1);
+  tl.setCrop(p, white.id, { left: 0.5, top: 0.5 }); // bottom-right quadrant only
+  const red = tl.addClip(p, quad.id);
+  tl.setImageDuration(p, red.id, 1);
+  tl.setCrop(p, red.id, { right: 0.5, bottom: 0.5 }); // top-left quadrant only
+  const bars = tl.addClip(p, photo.id); // 3:2 photo in 4:3 frame: bars top and bottom
+  tl.setImageDuration(p, bars.id, 1);
+  const filled = tl.addClip(p, photo.id);
+  tl.setImageDuration(p, filled.id, 1);
+  tl.cropToFillFrame(p, filled.id);
+
+  const out = outFile('crop.mp4');
+  await startExport(p, out, { quality: 'draft' }).promise;
+  // White everywhere in the square area, including where the red quadrant was before cropping.
+  assert.ok(lumaAt(out, 0.5, { w: 60, h: 60, x: 50, y: 10 }) > 230, 'cropped to white: top-left of area is white');
+  assert.ok(lumaAt(out, 0.5, { w: 60, h: 60, x: 210, y: 170 }) > 230, 'cropped to white: bottom-right too');
+  // Red quadrant zoomed in: Y of pure red is ~81.
+  const redY = lumaAt(out, 1.5, { w: 200, h: 200, x: 60, y: 20 });
+  assert.ok(redY > 70 && redY < 95, `cropped to red: Y ${redY}`);
+  assert.ok(lumaAt(out, 2.5, { w: 320, h: 10, x: 0, y: 0 }) < 20, 'uncropped 3:2 photo has a black bar on top');
+  assert.ok(lumaAt(out, 3.5, { w: 320, h: 10, x: 0, y: 0 }) > 40, 'crop to fill: picture reaches the top');
+});
+
 test('images export for exactly their clip length, scaled to fit, transparency as black', { skip }, async () => {
   const p = newProject({ width: 320, height: 240, fps: 30 });
   const white = tl.addMedia(p, await mediaFrom(clipPath('white_400.png')));

@@ -19,6 +19,10 @@ import {
   videoTrack, audioTracks, isLinkedToVideo,
 } from '../../shared/timeline.js';
 import { isReversed, sourceTimeAt } from '../../shared/effects.js';
+import { cropOf, cropLayout } from '../../shared/transform.js';
+import { CropEditor } from './cropEditor.js';
+
+const NO_CROP = { left: 0, right: 0, top: 0, bottom: 0 };
 import { frameDuration } from '../../shared/time.js';
 
 const PRELOAD_AHEAD = 3; // seconds before a cut to start loading the next clip
@@ -41,6 +45,11 @@ export class Preview {
     this.failedSrcs = new Set(); // originals Chromium can't decode (e.g. WMV)
     this.pendingSeek = null;
     this.audio = new AudioTracksPlayer(this.failedSrcs);
+    this.cropEditor = new CropEditor(this.frame);
+    store.on('crop-edit', () => {
+      if (store.cropEdit && this.playing) this.pause();
+      this.sync();
+    });
 
     for (const el of this.videos) {
       el.muted = true;
@@ -134,6 +143,51 @@ export class Preview {
     this.frame.style.height = `${Math.floor(height * scale)}px`;
     this.scale = scale;
     this.renderText(true);
+    // Re-place pictures for the new frame size.
+    for (const el of [...this.videos, this.image]) if (el.layoutArgs) this.layout(el, ...el.layoutArgs);
+  }
+
+  /**
+   * Size and position a video/image element so that the cropped area of the
+   * media fits the frame (like object-fit: contain), and clip off the rest.
+   * Mirrors the export: crop first, then scale to fit.
+   */
+  layout(el, media, crop) {
+    el.layoutArgs = [media, crop];
+    const boxW = parseFloat(this.frame.style.width) || this.frame.clientWidth;
+    const boxH = parseFloat(this.frame.style.height) || this.frame.clientHeight;
+    if (!media?.width || !media?.height || !boxW) {
+      Object.assign(el.style, { left: '0px', top: '0px', width: '100%', height: '100%', clipPath: '', objectFit: 'contain' });
+      return;
+    }
+    const l = cropLayout(media.width, media.height, crop ?? NO_CROP, boxW, boxH);
+    Object.assign(el.style, {
+      left: `${l.left}px`, top: `${l.top}px`, width: `${l.width}px`, height: `${l.height}px`,
+      clipPath: `inset(${l.inset})`, objectFit: 'fill',
+    });
+  }
+
+  /**
+   * The crop to show for a clip: none in crop mode (the full picture is shown,
+   * with the crop rectangle on top), otherwise the clip's crop.
+   */
+  shownCrop(clip) {
+    return store.cropEdit === clip.id ? NO_CROP : cropOf(clip);
+  }
+
+  /** Crop mode: show the editor over this clip's full picture, or hide it. */
+  renderCropEditor(clip, media) {
+    if (!store.cropEdit) return this.cropEditor.hide();
+    if (clip?.id !== store.cropEdit) {
+      // The playhead left the clip being cropped: crop mode ends.
+      this.cropEditor.hide();
+      queueMicrotask(() => store.setCropEdit(null));
+      return;
+    }
+    const boxW = parseFloat(this.frame.style.width);
+    const boxH = parseFloat(this.frame.style.height);
+    const l = cropLayout(media.width, media.height, NO_CROP, boxW, boxH);
+    this.cropEditor.show(clip, { left: l.left, top: l.top, width: l.width, height: l.height });
   }
 
   togglePlay() {
@@ -271,11 +325,11 @@ export class Preview {
     // through the audio-track player instead.
     const linked = linkedAudioOf(project, clip);
     const rel = t - clip.start;
-    if (!isReversed(clip)) return { mode: 'forward', file: src, target: clip.in + rel, linked };
+    if (!isReversed(clip)) return { mode: 'forward', file: src, target: clip.in + rel, linked, media };
     const reversedFile = reversedFileFor(clip, { video: true, audio: Boolean(linked && isReversed(linked)) });
-    if (playing && reversedFile) return { mode: 'reverse-file', file: reversedFile, target: rel, linked };
+    if (playing && reversedFile) return { mode: 'reverse-file', file: reversedFile, target: rel, linked, media };
     const target = Math.max(clip.in, sourceTimeAt(clip, rel) - 0.5 * frameDuration(project.settings.fps));
-    return { mode: 'reverse-step', file: src, target, linked };
+    return { mode: 'reverse-step', file: src, target, linked, media };
   }
 
   /** Point an element at a file and position. */
@@ -316,6 +370,7 @@ export class Preview {
     if (!sb.paused) sb.pause();
     if (sb.dataset.file !== p.file) this.load(sb, p.file, p.target);
     else if (!sb.seeking && Math.abs(sb.currentTime - p.target) > 0.02) sb.currentTime = p.target;
+    this.layout(sb, p.media, cropOf(next)); // ready-cropped, so the swap is seamless
   }
 
   /** Make the shown video element show the right frame for the playhead (or source time). */
@@ -333,6 +388,7 @@ export class Preview {
       this.showMessage(null);
       this.showNote(null);
       this.clipMode = 'forward';
+      this.renderCropEditor(null);
       if (!this.video.paused) this.video.pause();
       if (this.playing) this.preloadNext(t);
       return;
@@ -344,11 +400,14 @@ export class Preview {
       this.setVideoShown(false);
       if (!this.video.paused) this.video.pause();
       this.showImage(p.media);
+      this.layout(this.image, p.media, this.shownCrop(clip));
+      this.renderCropEditor(clip, p.media);
       if (this.playing) this.preloadNext(clipEnd(clip));
       return;
     }
     this.showImage(null);
     if (p.mode === 'missing') {
+      this.cropEditor.hide();
       this.setVideoShown(false);
       const pct = Math.round((store.mediaStatus.get(p.media.id)?.proxyProgress ?? 0) * 100);
       this.showMessage(`Preparing preview… ${pct}%`);
@@ -365,7 +424,9 @@ export class Preview {
       if (ready) this.swap();
       else this.load(this.video, p.file, p.target);
     }
+    this.layout(this.video, p.media, this.shownCrop(clip));
     this.setVideoShown(true);
+    this.renderCropEditor(clip, p.media);
 
     const { linked } = p;
     const linkedTrack = linked && trackOfClip(project, linked.id);
@@ -395,11 +456,13 @@ export class Preview {
     this.clipMode = 'forward';
     this.lastTextKey = null;
     this.standby.pause();
+    this.cropEditor.hide();
     if (media.isImage) {
       this.audio.stopAll();
       this.setVideoShown(false);
       if (!this.video.paused) this.video.pause();
       this.showImage(media);
+      this.layout(this.image, media, NO_CROP); // the source file as it is
       return;
     }
     this.showImage(null);
@@ -418,6 +481,7 @@ export class Preview {
 
     const target = store.source.time;
     if (this.currentSrc !== src) this.load(this.video, src, target);
+    this.layout(this.video, media, NO_CROP);
     this.video.volume = 1;
     if (this.playing) {
       this.video.muted = false;

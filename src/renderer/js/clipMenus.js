@@ -7,6 +7,7 @@ import { toast } from './util.js';
 import { hasClipboard, paste } from './clipboard.js';
 import * as tl from '../../shared/timeline.js';
 import { effectsForTrack, hasEffect } from '../../shared/effects.js';
+import { hasCrop } from '../../shared/transform.js';
 
 /** Open the menu for { kind: 'clip' | 'text' | 'media' | 'lane', id | trackId+t } at (x, y). */
 export function showItemMenu(target, run) {
@@ -80,6 +81,8 @@ function clipItems(id, run) {
     !isVideo && { label: 'Fade out 1 s', action: () => fade({ fadeOut: 1 }) },
     !isVideo && { label: 'Remove fades', disabled: !hasFades, action: () => fade({ fadeIn: 0, fadeOut: 0 }) },
     '-',
+    ...(isVideo ? transformItems(clip, run) : []),
+    '-',
     ...(media.isImage ? imageDurationItems(clip) : effectItems(clip, isVideo ? 'video' : 'audio')),
     '-',
     { label: 'Go to clip start', action: () => store.setPlayhead(clip.start) },
@@ -92,6 +95,16 @@ function clipItems(id, run) {
       : { label: 'Delete', shortcut: 'Del', danger: true, action: () => deleteClip(id, undefined) },
     linkedVideo && { label: 'Delete video only', shortcut: 'Ctrl+click, Del', danger: true, action: () => deleteClip(id, false) },
     isVideo && { label: 'Ripple delete', shortcut: 'Shift+Del', danger: true, action: () => run('rippleDelete') },
+  ];
+}
+
+/** Transform: crop on the preview, crop to the frame shape, reset. */
+function transformItems(clip, run) {
+  return [
+    { heading: 'Transform' },
+    { label: 'Crop on preview…', shortcut: 'C', action: () => run('cropMode') },
+    { label: 'Crop to fill frame', action: () => run('cropFill') },
+    { label: 'Reset crop', disabled: !hasCrop(clip), action: () => run('cropReset') },
   ];
 }
 

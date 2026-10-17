@@ -32,6 +32,7 @@ export const SHORTCUTS = [
       ['D', 'Unlink a clip from its sound'],
       ['M', 'Mute / unmute the selected clip\'s sound'],
       ['T', 'Add text at playhead'],
+      ['C', 'Crop the selected clip on the preview (Enter / Esc: done)'],
     ],
   },
   {

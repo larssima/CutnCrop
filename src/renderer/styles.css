@@ -164,7 +164,8 @@ textarea { resize: vertical; }
 .source-bar[hidden] { display: none; }
 .source-fill { height: 100%; width: 0; background: var(--accent-2); pointer-events: none; }
 .preview-frame { position: relative; background: #000; overflow: hidden; box-shadow: 0 0 0 1px #262830; }
-.preview-frame video, .preview-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+/* Sized and positioned per clip by Preview.layout() so the cropped area fits the frame. */
+.preview-frame video, .preview-image { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: fill; }
 /* Two video elements take turns; only the shown one is visible (the other preloads). */
 .preview-frame video { opacity: 0; }
 .preview-frame video.shown { opacity: 1; }
@@ -184,6 +185,38 @@ textarea { resize: vertical; }
   color: var(--text-dim);
 }
 .preview-message[hidden] { display: none; }
+/* ---- Crop mode ---- */
+.crop-overlay { position: absolute; z-index: 4; cursor: default; touch-action: none; }
+.crop-overlay[hidden], .crop-bar[hidden] { display: none; }
+.crop-box {
+  position: absolute; border: 1px solid #fff; cursor: move;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.55), inset 0 0 0 1px rgb(0 0 0 / 0.4);
+  /* rule-of-thirds guides */
+  background-image:
+    linear-gradient(to right, transparent calc(33.33% - 0.5px), rgb(255 255 255 / 0.35) calc(33.33% - 0.5px), rgb(255 255 255 / 0.35) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px), transparent calc(66.66% - 0.5px), rgb(255 255 255 / 0.35) calc(66.66% - 0.5px), rgb(255 255 255 / 0.35) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(33.33% - 0.5px), rgb(255 255 255 / 0.35) calc(33.33% - 0.5px), rgb(255 255 255 / 0.35) calc(33.33% + 0.5px), transparent calc(33.33% + 0.5px), transparent calc(66.66% - 0.5px), rgb(255 255 255 / 0.35) calc(66.66% - 0.5px), rgb(255 255 255 / 0.35) calc(66.66% + 0.5px), transparent calc(66.66% + 0.5px));
+}
+.preview-frame:has(.crop-overlay:not([hidden])) { overflow: visible; }
+.crop-handle { position: absolute; width: 14px; height: 14px; margin: -7px; background: #fff; border: 1px solid #222; border-radius: 2px; }
+.crop-handle.nw { left: 0; top: 0; cursor: nwse-resize; }
+.crop-handle.ne { left: 100%; top: 0; cursor: nesw-resize; }
+.crop-handle.se { left: 100%; top: 100%; cursor: nwse-resize; }
+.crop-handle.sw { left: 0; top: 100%; cursor: nesw-resize; }
+.crop-handle.n { left: 50%; top: 0; cursor: ns-resize; width: 26px; margin-left: -13px; height: 8px; margin-top: -4px; }
+.crop-handle.s { left: 50%; top: 100%; cursor: ns-resize; width: 26px; margin-left: -13px; height: 8px; margin-top: -4px; }
+.crop-handle.e { left: 100%; top: 50%; cursor: ew-resize; height: 26px; margin-top: -13px; width: 8px; margin-left: -4px; }
+.crop-handle.w { left: 0; top: 50%; cursor: ew-resize; height: 26px; margin-top: -13px; width: 8px; margin-left: -4px; }
+.crop-size {
+  position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); pointer-events: none;
+  padding: 1px 6px; border-radius: 3px; background: rgb(0 0 0 / 0.65); font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.crop-bar {
+  position: absolute; left: 50%; top: 8px; transform: translateX(-50%); z-index: 5;
+  display: flex; align-items: center; gap: 10px; white-space: nowrap;
+  padding: 4px 4px 4px 12px; border-radius: 6px; background: rgb(22 23 27 / 0.9); border: 1px solid var(--border); font-size: 12px;
+}
+.crop-bar button { padding: 3px 12px; }
+
 .preview-note {
   position: absolute; right: 8px; bottom: 8px; padding: 3px 8px; border-radius: 4px;
   background: rgb(0 0 0 / 0.7); color: var(--text-dim); font-size: 11px; pointer-events: none;
@@ -209,6 +242,10 @@ textarea { resize: vertical; }
 .checkbox { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 .checkbox input { width: auto; accent-color: var(--accent); }
 .hint-inline { color: var(--text-dim); font-size: 11px; }
+.crop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; }
+.crop-field { display: grid; grid-template-columns: 46px 1fr; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); }
+.field.transform .button-row { margin-top: 6px; }
+.transform-mark { margin-right: 4px; font-size: 11px; }
 .slider-value { min-width: 40px; text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; }
 .info-grid > :nth-child(odd) { color: var(--text-dim); }

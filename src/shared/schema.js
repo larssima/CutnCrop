@@ -2,8 +2,9 @@
 // source of truth: the UI, the preview and the exporter all read from it.
 
 import { EFFECTS } from './effects.js';
+import { defaultTransform } from './transform.js';
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const DEFAULT_SETTINGS = Object.freeze({
   width: 1920,
@@ -109,6 +110,10 @@ export function migrateProject(project) {
   for (const track of p.tracks) for (const clip of track.clips ?? []) clip.effects ??= [];
   // v4 -> v5: still images (media.isImage); settings.imageDuration comes from the defaults.
   for (const m of p.media) m.isImage ??= false;
+  // v5 -> v6: transform (crop) on video-track clips.
+  for (const track of p.tracks) {
+    if (track.type === 'video') for (const clip of track.clips) clip.transform ??= defaultTransform();
+  }
   p.version = SCHEMA_VERSION;
   return p;
 }
@@ -176,6 +181,12 @@ export function validateProject(project) {
         if (c.fadeIn < 0 || c.fadeOut < 0 || c.fadeIn + c.fadeOut > c.out - c.in + 1e-6) {
           errors.push(`Clip ${c.id} has invalid fades`);
         }
+      }
+      if (c.transform) {
+        const { left = 0, right = 0, top = 0, bottom = 0 } = c.transform.crop ?? {};
+        const ok = [left, right, top, bottom].every((x) => x >= 0 && x <= 1) && left + right < 1 && top + bottom < 1;
+        if (!ok) errors.push(`Clip ${c.id} has an invalid crop`);
+        if (track.type !== 'video') errors.push(`Clip ${c.id}: only video and image clips can be transformed`);
       }
       for (const e of c.effects ?? []) {
         if (!EFFECTS[e.type]) errors.push(`Clip ${c.id} has unknown effect "${e.type}"`);

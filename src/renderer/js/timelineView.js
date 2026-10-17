@@ -8,6 +8,7 @@ import { h, $, mediaUrl } from './util.js';
 import { getPeaks, PEAKS_PER_SECOND } from './media.js';
 import * as tl from '../../shared/timeline.js';
 import { EFFECTS, isReversed } from '../../shared/effects.js';
+import { hasCrop } from '../../shared/transform.js';
 import { formatDuration } from '../../shared/time.js';
 
 const SNAP_PX = 8;
@@ -276,6 +277,7 @@ export class TimelineView {
     const style = { left: `${this.x(clip.start)}px`, width: `${Math.max(2, this.x(tl.clipDuration(clip)))}px` };
     const linkMark = [
       clip.linkId ? h('span.link-mark', { title: 'Linked — moves with its partner. Unlink with D.' }, '🔗') : null,
+      hasCrop(clip) ? h('span.transform-mark', { title: 'Cropped (Transform)' }, '⛶') : null,
       ...(clip.effects ?? []).map((e) => EFFECTS[e.type] && h('span.effect-mark', { title: `Effect: ${EFFECTS[e.type].label}` }, EFFECTS[e.type].icon)),
     ];
 

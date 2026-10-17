@@ -43,7 +43,7 @@ Video editing needs fast disk access to large files, hardware-accelerated decodi
 ```
 (`start` = position on timeline, `in`/`out` = trim points within the source, all in seconds.)
 
-The implemented schema is now v5 (v4 added clip `effects`, first effect `reverse`; v5 added still images). It adds audio tracks (`type: "audio"`, clips with `volume`, `muted`, `fadeIn`/`fadeOut`); a video's own sound is an audio clip linked to it via `linkId`. It also adds audio-only media, `track.muted`, media `name`, `width`, `height`, `vfr` and cache paths, and text `color`. The full reference is [docs/project-schema.md](docs/project-schema.md).
+The implemented schema is now v6 (v4 added clip `effects`, first effect `reverse`; v5 added still images; v6 added clip `transform` with crop). It adds audio tracks (`type: "audio"`, clips with `volume`, `muted`, `fadeIn`/`fadeOut`); a video's own sound is an audio clip linked to it via `linkId`. It also adds audio-only media, `track.muted`, media `name`, `width`, `height`, `vfr` and cache paths, and text `color`. The full reference is [docs/project-schema.md](docs/project-schema.md).
 
 ## MVP scope (milestone 1)
 1. Open/import clips (file picker + drag and drop); probe with ffprobe.

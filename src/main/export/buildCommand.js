@@ -16,6 +16,7 @@ import path from 'node:path';
 import { sortedClips, textTrack, findMedia, clipEnd, audioTracks, projectDuration, clipDuration } from '../../shared/timeline.js';
 import { fpsString, frameCount, framesToSeconds, samplesForFrames } from '../../shared/time.js';
 import { isReversed } from '../../shared/effects.js';
+import { cropOf, hasCrop } from '../../shared/transform.js';
 
 const DEFAULT_FONT = process.platform === 'win32' ? 'C:/Windows/Fonts/arial.ttf' : null;
 
@@ -38,6 +39,16 @@ function hexColor(color) {
 }
 
 const num = (x) => Number(x.toFixed(6));
+
+/**
+ * Transform crop: keep the area left after removing the given fractions of each
+ * edge. Applied before scaling, so the kept area is what gets fitted to the frame.
+ */
+function cropFilter(clip) {
+  if (!hasCrop(clip)) return '';
+  const c = cropOf(clip);
+  return `crop=w=iw*${num(1 - c.left - c.right)}:h=ih*${num(1 - c.top - c.bottom)}:x=iw*${num(c.left)}:y=ih*${num(c.top)},`;
+}
 
 /**
  * Split the video track into contiguous segments, measured in whole frames.
@@ -105,8 +116,8 @@ export function buildExportCommand(project, outPath, opts = {}) {
    * Images first get their transparency turned into black (premultiplied alpha);
    * otherwise transparent pixels would show whatever colour they happen to store.
    */
-  const normalizedVideo = (i, frames, { image = false } = {}) =>
-    `[${i}:v:0]${image ? 'format=rgba,premultiply=inplace=1,' : ''}fps=fps=${R}:start_time=0,` +
+  const normalizedVideo = (i, frames, { image = false, clip = null } = {}) =>
+    `[${i}:v:0]${image ? 'format=rgba,premultiply=inplace=1,' : ''}${cropFilter(clip)}fps=fps=${R}:start_time=0,` +
     `scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
     `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p,` +
     `tpad=stop_mode=clone:stop=${frames},trim=end_frame=${frames},setpts=PTS-STARTPTS`;
@@ -124,7 +135,7 @@ export function buildExportCommand(project, outPath, opts = {}) {
       filters.push(`color=c=black:s=${W}x${H}:r=${R},format=yuv420p,setsar=1,trim=end_frame=${frames}[${v}]`);
     } else if (findMedia(project, seg.clip.mediaId).isImage) {
       const i = addImageInput(findMedia(project, seg.clip.mediaId), framesToSeconds(frames, fps));
-      filters.push(`${normalizedVideo(i, frames, { image: true })}[${v}]`);
+      filters.push(`${normalizedVideo(i, frames, { image: true, clip: seg.clip })}[${v}]`);
     } else if (isReversed(seg.clip)) {
       // The segment shows the clip's forward frames 0..frames-1 (from `in`) backwards;
       // any skipped timeline start corresponds to the source end, which isn't used.
@@ -135,7 +146,7 @@ export function buildExportCommand(project, outPath, opts = {}) {
         const len = Math.min(reverseChunkFrames, frames - first);
         const i = addInput(media, clip.in + framesToSeconds(first, fps), framesToSeconds(len, fps));
         const label = `${v}r${chunks.length}`;
-        filters.push(`${normalizedVideo(i, len)},reverse,setpts=PTS-STARTPTS[${label}]`);
+        filters.push(`${normalizedVideo(i, len, { clip })},reverse,setpts=PTS-STARTPTS[${label}]`);
         chunks.push(`[${label}]`);
       }
       if (chunks.length === 1) filters.push(`${chunks[0]}null[${v}]`);
@@ -144,7 +155,7 @@ export function buildExportCommand(project, outPath, opts = {}) {
       const { clip } = seg;
       const media = findMedia(project, clip.mediaId);
       const i = addInput(media, clip.in + framesToSeconds(seg.skipF, fps), framesToSeconds(frames, fps));
-      filters.push(`${normalizedVideo(i, frames)}[${v}]`);
+      filters.push(`${normalizedVideo(i, frames, { clip })}[${v}]`);
     }
     concatInputs.push(`[${v}]`);
   });
