@@ -112,7 +112,7 @@ keep opening, validating and exporting (`test/integration/compat.test.js`). Add 
 |---|---|
 | 0.1.0, 0.2.0 | v3 |
 | 0.3.0, 0.3.1 | v5 |
-| next release | v6 |
+| 0.4.0 | v6 |
 
 - **v6**: `clip.transform` with `crop` on video-track clips. Older files get "no crop".
 - **v5**: still images (`media.isImage`, `settings.imageDuration`). Older files get `isImage: false`.

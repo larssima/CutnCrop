@@ -3,7 +3,7 @@
 All notable changes to CutnCrop. Versions follow [semantic versioning](https://semver.org):
 MAJOR for incompatible project-file or behavior changes, MINOR for new features, PATCH for fixes.
 
-## Unreleased
+## 0.4.0 — 2026-10-17
 
 - **Transform → Crop** for video and image clips. The kept area zooms to fill the frame.
   Crop on the preview (C, or right-click → Crop on preview…: drag edges/corners, drag inside
