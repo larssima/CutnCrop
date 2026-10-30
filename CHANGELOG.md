@@ -3,6 +3,12 @@
 All notable changes to CutnCrop. Versions follow [semantic versioning](https://semver.org):
 MAJOR for incompatible project-file or behavior changes, MINOR for new features, PATCH for fixes.
 
+## Unreleased
+
+- Select several clips with **Ctrl+click** (click again to take one out). Copy, cut, paste and
+  delete work on all of them; a paste keeps their spacing relative to each other.
+- Changed: selecting a video clip without its sound is now **Alt+click** (it was Ctrl+click).
+
 ## 0.4.0 — 2026-10-17
 
 - **Transform → Crop** for video and image clips. The kept area zooms to fill the frame.

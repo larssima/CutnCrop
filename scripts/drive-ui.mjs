@@ -277,7 +277,7 @@ console.log('restored:', JSON.stringify(await videoStarts()));
 // delete it (the video must stay), drop music in its place, drag a 1 s fade-in.
 const linkedOnA1 = await page.evaluate(() => document.querySelectorAll('.lane[data-track-id=a1] .clip .link-mark').length);
 console.log('linked clip sounds on A1:', linkedOnA1);
-// Selection rules: click video = video + its sound; Ctrl+click = video only.
+// Selection rules: click video = video + its sound; Alt+click = video only; Ctrl+click = add to selection.
 const counts = () => page.evaluate(() => ({
   video: document.querySelectorAll('.lane.video .clip').length,
   audio: document.querySelectorAll('.lane.audio .clip').length,
@@ -289,12 +289,39 @@ const clickSel = await counts();
 await page.keyboard.press('Delete');
 console.log('click video: selected', clickSel.selected, '-> after Delete', JSON.stringify(await counts()));
 await page.keyboard.press('Control+z');
-await page.click(third, { position: { x: 30, y: 20 }, modifiers: ['Control'] });
-const ctrlSel = await counts();
+await page.click(third, { position: { x: 30, y: 20 }, modifiers: ['Alt'] });
+const altSel = await counts();
 await page.keyboard.press('Delete');
-console.log('ctrl+click video: selected', ctrlSel.selected, '-> after Delete', JSON.stringify(await counts()));
+console.log('alt+click video: selected', altSel.selected, '-> after Delete', JSON.stringify(await counts()));
 await page.keyboard.press('Control+z');
 console.log('after undo', JSON.stringify(await counts()));
+
+// Several clips: video clips start at 0, 2, 5, 9 and end at 13.
+const nth = (n) => `.lane.video .clip:nth-child(${n})`;
+const multiStarts = () => page.evaluate(() => window.cutncrop.store.project.tracks.find((t) => t.id === 'v1').clips.map((c) => c.start).sort((a, b) => a - b));
+await page.click(nth(1), { position: { x: 20, y: 20 } });
+await page.click(nth(3), { position: { x: 20, y: 20 }, modifiers: ['Control'] });
+console.log('ctrl+click two clips:', JSON.stringify({ ...(await counts()), panel: await page.textContent('.inspector-title') }));
+await page.keyboard.press('s');
+console.log('S with several selected (nothing may split):', JSON.stringify(await multiStarts()));
+await page.click(nth(3), { button: 'right', position: { x: 20, y: 20 } });
+console.log('menu on several:', JSON.stringify(await menuLabels()), 'selected still', (await counts()).selected);
+await page.keyboard.press('Escape');
+await page.keyboard.press('Control+c');
+await page.click('.lane.add-row', { position: { x: 5, y: 5 } });
+await page.keyboard.press('Control+v');
+console.log('paste at end, spacing kept (expect copies at 13 and 18):', JSON.stringify(await multiStarts()), 'selected', (await counts()).selected);
+await page.keyboard.press('Control+z');
+await page.click(nth(1), { position: { x: 20, y: 20 } });
+await page.click(nth(3), { position: { x: 20, y: 20 }, modifiers: ['Control'] });
+await page.click(nth(3), { position: { x: 20, y: 20 }, modifiers: ['Control'] });
+console.log('ctrl+click again takes it out, selected:', (await counts()).selected);
+await page.click(nth(3), { position: { x: 20, y: 20 }, modifiers: ['Control'] });
+await page.keyboard.press('Delete');
+console.log('delete both (expect 2 and 9 left):', JSON.stringify(await multiStarts()), JSON.stringify(await counts()));
+await page.keyboard.press('Control+z');
+await page.click(nth(2), { position: { x: 20, y: 20 } });
+console.log('plain click: back to one clip, selected', (await counts()).selected, 'restored', JSON.stringify(await multiStarts()));
 
 const videoClipsBefore = await page.locator('.lane.video .clip').count();
 await page.click('.lane[data-track-id=a1] .clip:nth-child(1)', { position: { x: 30, y: 30 } });

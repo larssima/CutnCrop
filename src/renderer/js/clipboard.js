@@ -21,18 +21,20 @@ export const hasClipboard = () => clipboard !== null;
 export function copySelection() {
   const s = store.selection;
   const p = store.project;
-  if (s?.kind === 'clip') clipboard = tl.copyClip(p, s.id, { withLinked: s.withLinked });
+  if (s?.kind === 'clip') clipboard = tl.copyClips(p, store.selectedClipIds, { withLinked: s.withLinked });
   else if (s?.kind === 'text') clipboard = tl.copyText(p, s.id);
   else return toast('Select a clip or text to copy.'), false;
   const n = clipboard.kind === 'clips' ? clipboard.clips.length : 1;
-  toast(clipboard.kind === 'text' ? 'Text copied' : n > 1 ? 'Clip and its sound copied' : 'Clip copied');
+  if (s.ids) toast(`${s.ids.length} clips copied`);
+  else toast(clipboard.kind === 'text' ? 'Text copied' : n > 1 ? 'Clip and its sound copied' : 'Clip copied');
   return true;
 }
 
 export function cutSelection() {
   const s = store.selection;
+  const ids = store.selectedClipIds;
   if (!copySelection()) return;
-  if (s.kind === 'clip') store.edit((p) => tl.deleteClip(p, s.id, { withLinked: s.withLinked }));
+  if (s.kind === 'clip') store.edit((p) => tl.deleteClips(p, ids, { withLinked: s.withLinked }));
   else store.edit((p) => tl.deleteText(p, s.id));
   store.select(null);
 }
@@ -49,28 +51,34 @@ export function paste(where = 'auto') {
   }
 
   const main = clipboard.clips[0];
+  const hasVideo = clipboard.clips.some((c) => c.trackType === 'video');
   const pasted = store.edit((p) => {
-    const lane = main.trackType === 'video' ? tl.videoTrack(p) : tl.findTrack(p, main.trackId) ?? tl.audioTracks(p)[0];
+    const lane = hasVideo ? tl.videoTrack(p) : tl.findTrack(p, main.trackId) ?? tl.audioTracks(p)[0];
     if (typeof where === 'object') {
       // Into empty space: only push later clips along if a video clip doesn't fit
       // there. Sound never pushes; it goes to a lane with room instead.
-      const fits = main.trackType === 'audio' || tl.fitsOnTrack(lane, where.at, where.at + clipboard.duration);
-      return tl.pasteClips(p, clipboard, where.at, { insert: !fits });
+      const fits = !hasVideo || tl.fitsOnTrack(lane, where.at, where.at + clipboard.duration);
+      return tl.pasteClipGroup(p, clipboard, where.at, { insert: !fits });
     }
-    const selected = store.selection?.kind === 'clip' ? tl.findClip(p, store.selection.id) : null;
     // Sound on its own is placed, never inserted: it goes to a lane with room
     // rather than pushing the picture (and everything linked) along.
-    const insert = main.trackType === 'video';
+    const insert = hasVideo;
     if (where === 'playhead') {
       // Insert edit: split the video clip under the playhead, then make room.
       const under = insert && tl.clipAt(p, store.playhead, lane);
       if (under && store.playhead > under.start + 1e-6) tl.splitClip(p, under.id, store.playhead);
-      return tl.pasteClips(p, clipboard, store.playhead, { insert });
+      return tl.pasteClipGroup(p, clipboard, store.playhead, { insert });
     }
-    if (selected) return tl.pasteClips(p, clipboard, tl.clipEnd(selected), { insert });
-    return tl.pasteClips(p, clipboard, tl.trackEnd(lane));
+    // Right after the selected clip, or the last of several.
+    const selectedEnds = store.selectedClipIds.map((id) => tl.findClip(p, id)).filter(Boolean).map((c) => tl.clipEnd(c));
+    if (selectedEnds.length) return tl.pasteClipGroup(p, clipboard, Math.max(...selectedEnds), { insert });
+    return tl.pasteClipGroup(p, clipboard, tl.trackEnd(lane));
   });
-  store.select({ kind: 'clip', id: pasted.id });
+  // Select what was pasted; linked sound comes with its video, as on a click.
+  const project = store.project;
+  const isVideo = (c) => tl.trackOfClip(project, c.id).type === 'video';
+  const toSelect = pasted.filter((c) => isVideo(c) || !c.linkId || !pasted.some((o) => o.linkId === c.linkId && isVideo(o)));
+  store.selectClips(toSelect.map((c) => c.id));
 
   // Pasting into another project can bring new media along: make its previews.
   const added = store.project.media.filter((m) => !before.has(m.id));

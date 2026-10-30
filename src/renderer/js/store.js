@@ -16,8 +16,9 @@ class Store extends EventTarget {
     this.project = createProject();
     this.filePath = null;
     this.dirty = false;
-    // { kind: 'clip' | 'text' | 'media', id, withLinked? } — withLinked: false
-    // when a video clip was Ctrl+clicked to select it without its sound.
+    // { kind: 'clip' | 'text' | 'media', id, withLinked?, ids? }
+    // withLinked: false when a video clip was Alt+clicked to select it without its sound.
+    // ids: all selected clips when Ctrl+click selected several (id is the latest one).
     this.selection = null;
     this.playhead = 0;
     // Source monitor: when set, the preview shows a media file on its own
@@ -142,11 +143,35 @@ class Store extends EventTarget {
     const s = this.selection;
     if (!s) return;
     const p = this.project;
+    if (s.ids) {
+      // Several clips: keep those that still exist (undo can remove some).
+      const hasClip = (id) => p.tracks.some((t) => t.clips?.some((c) => c.id === id));
+      this.selectClips(s.ids.filter(hasClip));
+      return;
+    }
     const exists =
       (s.kind === 'media' && p.media.some((m) => m.id === s.id)) ||
       (s.kind === 'clip' && p.tracks.some((t) => t.clips?.some((c) => c.id === s.id))) ||
       (s.kind === 'text' && p.tracks.some((t) => t.items?.some((x) => x.id === s.id)));
     if (!exists) this.select(null);
+  }
+
+  /** Ids of the selected clips (none when the selection isn't clips). */
+  get selectedClipIds() {
+    const s = this.selection;
+    return s?.kind === 'clip' ? s.ids ?? [s.id] : [];
+  }
+
+  /** Select exactly these clips; the last one is the primary. */
+  selectClips(ids) {
+    if (!ids.length) return this.select(null);
+    this.select(ids.length > 1 ? { kind: 'clip', id: ids.at(-1), ids } : { kind: 'clip', id: ids[0] });
+  }
+
+  /** Ctrl+click: add a clip to the selection, or take it out if it's already in. */
+  toggleClip(id) {
+    const ids = this.selectedClipIds;
+    this.selectClips(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
   }
 
   /** Enter (clip id) or leave (null) crop mode. */
@@ -188,7 +213,8 @@ class Store extends EventTarget {
     const same =
       selection?.id === this.selection?.id &&
       selection?.kind === this.selection?.kind &&
-      Boolean(selection?.withLinked) === Boolean(this.selection?.withLinked);
+      Boolean(selection?.withLinked) === Boolean(this.selection?.withLinked) &&
+      selection?.ids?.join() === this.selection?.ids?.join();
     if (same) return;
     this.selection = selection;
     this.emit('selection');

@@ -13,7 +13,8 @@ import { hasCrop } from '../../shared/transform.js';
 export function showItemMenu(target, run) {
   const { kind, id, x, y } = target;
   const items =
-    kind === 'clip' ? clipItems(id, run)
+    kind === 'clip' && store.selection?.ids ? multipleClipItems(store.selection.ids.length, run)
+    : kind === 'clip' ? clipItems(id, run)
     : kind === 'text' ? textItems(id, run)
     : kind === 'lane' ? laneItems(target)
     : mediaItems(id, run);
@@ -25,6 +26,17 @@ const clipboardItems = (run, { pasteLabel = 'Paste after this clip' } = {}) => [
   { label: 'Cut', shortcut: 'Ctrl+X', action: () => run('cut') },
   pasteLabel && { label: pasteLabel, shortcut: 'Ctrl+V', disabled: !hasClipboard(), action: () => run('paste') },
 ];
+
+/** Several clips selected: what works on all of them together. */
+function multipleClipItems(count, run) {
+  return [
+    { heading: `${count} clips selected` },
+    ...clipboardItems(run, { pasteLabel: 'Paste after these clips' }),
+    '-',
+    { label: `Delete ${count} clips`, shortcut: 'Del', danger: true, action: () => run('delete') },
+    { label: 'Ripple delete', shortcut: 'Shift+Del', danger: true, action: () => run('rippleDelete') },
+  ];
+}
 
 /** "Move to end of previous / start of next" items, disabled when there is no gap. */
 function gapMoveItems(id, start, end, run) {
@@ -93,7 +105,7 @@ function clipItems(id, run) {
     linkedVideo
       ? { label: 'Delete clip and its sound', shortcut: 'Del', danger: true, action: () => deleteClip(id, true) }
       : { label: 'Delete', shortcut: 'Del', danger: true, action: () => deleteClip(id, undefined) },
-    linkedVideo && { label: 'Delete video only', shortcut: 'Ctrl+click, Del', danger: true, action: () => deleteClip(id, false) },
+    linkedVideo && { label: 'Delete video only', shortcut: 'Alt+click, Del', danger: true, action: () => deleteClip(id, false) },
     isVideo && { label: 'Ripple delete', shortcut: 'Shift+Del', danger: true, action: () => run('rippleDelete') },
   ];
 }

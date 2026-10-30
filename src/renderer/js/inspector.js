@@ -66,10 +66,22 @@ export class Inspector {
   render() {
     const s = store.selection;
     const p = store.project;
+    if (s?.ids) return this.renderMultipleClips(s.ids.length);
     if (s?.kind === 'clip' && tl.findClip(p, s.id)) return this.renderClip(tl.findClip(p, s.id));
     if (s?.kind === 'text' && tl.findText(p, s.id)) return this.renderText(tl.findText(p, s.id));
     if (s?.kind === 'media' && tl.findMedia(p, s.id)) return this.renderMedia(tl.findMedia(p, s.id));
     return this.renderProject();
+  }
+
+  renderMultipleClips(count) {
+    this.show(`${count} clips selected`,
+      h('p.hint', {}, 'Copy, cut, paste and delete work on all of them. Click a single clip to edit its settings.'),
+      h('div.button-row', {},
+        h('button', { onclick: () => store.emit('command', 'copy') }, 'Copy'),
+        h('button', { onclick: () => store.emit('command', 'cut') }, 'Cut'),
+        h('button.danger', { onclick: () => store.emit('command', 'delete') }, 'Delete'),
+      ),
+    );
   }
 
   show(title, ...children) {

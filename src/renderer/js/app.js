@@ -137,7 +137,7 @@ const commands = {
   delete: (ripple = false) => {
     const s = store.selection;
     if (!s) return;
-    if (s.kind === 'clip') store.edit((p) => tl.deleteClip(p, s.id, { ripple, withLinked: s.withLinked }));
+    if (s.kind === 'clip') store.edit((p) => tl.deleteClips(p, store.selectedClipIds, { ripple, withLinked: s.withLinked }));
     else if (s.kind === 'text') store.edit((p) => tl.deleteText(p, s.id));
     else if (s.kind === 'media') {
       const uses = tl.clipTracks(store.project).flatMap((t) => t.clips).filter((c) => c.mediaId === s.id).length;
@@ -213,9 +213,16 @@ const commands = {
   nextFrame: () => step(1),
 };
 
+// These act on one clip; with several selected they'd silently hit only one of them.
+const ONE_CLIP_COMMANDS = new Set(['split', 'duplicate', 'unlink', 'toggleMute', 'moveToPrevious', 'moveToNext', 'cropMode', 'cropFill', 'cropReset']);
+
 function run(name) {
   const fn = commands[name];
   if (!fn) return;
+  if (store.selection?.ids && ONE_CLIP_COMMANDS.has(name)) {
+    toast('That works on one clip at a time. Click a single clip first.');
+    return;
+  }
   Promise.resolve(fn()).catch((e) => toast(e.message, { error: true }));
 }
 

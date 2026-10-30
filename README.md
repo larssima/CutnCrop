@@ -70,7 +70,9 @@ linked, unlinked and moved audio against the flashes, the mix level, fades and m
 
 - A video's sound is placed on an audio track (A1 when free) as a separate clip, **linked** (🔗)
   to the video: they move, trim and split together.
-- **Click** a video clip to select it with its sound; **Ctrl+click** selects the video alone.
+- **Click** a video clip to select it with its sound; **Alt+click** selects the video alone.
+  **Ctrl+click** adds clips to the selection (or takes them out): copy, cut, paste and delete then
+  work on all of them, and a paste keeps their spacing relative to each other.
   Clicking a sound clip selects just the sound. **Delete** removes what is selected; whatever is
   left of a linked pair becomes unlinked.
 - **D** unlinks the selected clip; then the sound can be moved or deleted on its own, e.g. to

@@ -24,14 +24,13 @@ export function setDraggedMedia(id) {
 }
 
 /**
- * Does a clip selection include the clip's linked partners? A video clip is
- * selected with its sound unless Ctrl+clicked (withLinked: false); a sound clip
- * is selected alone. Matches deleteClip's defaults.
+ * Does selecting this clip include its linked partners? A video clip is selected
+ * with its sound unless Alt+clicked (withLinked: false); a sound clip is selected
+ * alone. Matches deleteClip's defaults.
  */
-export function selectsLinked(project, sel) {
-  if (sel?.kind !== 'clip') return false;
+function selectsLinked(project, sel, clipId) {
   if (sel.withLinked !== undefined) return sel.withLinked;
-  return tl.trackOfClip(project, sel.id)?.type === 'video';
+  return tl.trackOfClip(project, clipId)?.type === 'video';
 }
 
 /** Lane order on screen: text on top, then video, then audio tracks. */
@@ -259,14 +258,18 @@ export class TimelineView {
     );
   }
 
-  /** '.selected' for the selected clip, and for its partners when selected together with them. */
+  /** '.selected' for selected clips, and for their partners when selected together with them. */
   selectionClass(clip) {
     const sel = store.selection;
     if (sel?.kind !== 'clip') return '';
-    if (sel.id === clip.id) return '.selected';
-    const selected = tl.findClip(store.project, sel.id);
-    if (!selected?.linkId || selected.linkId !== clip.linkId) return '';
-    return selectsLinked(store.project, sel) ? '.selected' : '';
+    const ids = store.selectedClipIds;
+    if (ids.includes(clip.id)) return '.selected';
+    if (!clip.linkId) return '';
+    const viaPartner = ids.some((id) => {
+      const selected = tl.findClip(store.project, id);
+      return selected?.linkId === clip.linkId && selectsLinked(store.project, sel, id);
+    });
+    return viaPartner ? '.selected' : '';
   }
 
   renderClip(track, clip, canvases) {
@@ -298,7 +301,7 @@ export class TimelineView {
           backgroundPosition: `${-clip.in * z}px 0`,
         });
       }
-      const tip = clip.linkId ? `${media?.name}\nClick: select with its sound · Ctrl+click: video only` : media?.name;
+      const tip = clip.linkId ? `${media?.name}\nClick: select with its sound · Ctrl+click: add to selection · Alt+click: video only` : media?.name;
       return h(`div.clip.video${cls}`, { dataset: { id: clip.id }, style, title: tip },
         thumbs,
         h('div.handle.in', { dataset: { edge: 'in' } }),
@@ -398,9 +401,14 @@ export class TimelineView {
     const id = itemEl.dataset.id;
     const kind = itemEl.classList.contains('text-item') ? 'text' : 'clip';
     const item = kind === 'clip' ? tl.findClip(store.project, id) : tl.findText(store.project, id);
-    // A plain click on a linked video clip selects its sound too; Ctrl+click selects the video alone.
+    // Ctrl+click adds a clip to the selection or takes it out; it doesn't start a drag.
+    if (e.ctrlKey && kind === 'clip') {
+      store.toggleClip(id);
+      return;
+    }
+    // A plain click on a linked video clip selects its sound too; Alt+click selects the video alone.
     // Clicking a sound clip selects just the sound.
-    store.select({ kind, id, withLinked: e.ctrlKey && kind === 'clip' ? false : undefined });
+    store.select({ kind, id, withLinked: e.altKey && kind === 'clip' ? false : undefined });
     const start = item.start;
     const end = kind === 'clip' ? tl.clipEnd(item) : item.end;
 
@@ -481,7 +489,9 @@ export class TimelineView {
     }
     e.preventDefault();
     const kind = itemEl.classList.contains('text-item') ? 'text' : 'clip';
-    store.select({ kind, id: itemEl.dataset.id, withLinked: e.ctrlKey && kind === 'clip' ? false : undefined });
+    // Right-clicking one of several selected clips keeps them selected, for the menu.
+    const inMultiple = store.selection?.ids?.includes(itemEl.dataset.id);
+    if (!inMultiple) store.select({ kind, id: itemEl.dataset.id, withLinked: e.altKey && kind === 'clip' ? false : undefined });
     store.emit('context-menu', { kind, id: itemEl.dataset.id, x: e.clientX, y: e.clientY });
   }
 

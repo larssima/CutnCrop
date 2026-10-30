@@ -525,22 +525,43 @@ export function cutPoints(project) {
  * project works too. The copied clip comes first in `clips`.
  */
 export function copyClip(project, clipId, { withLinked } = {}) {
-  const clip = findClip(project, clipId);
-  if (!clip) return null;
-  withLinked ??= trackOfClip(project, clipId).type === 'video';
-  const group = withLinked ? linkGroup(project, clip) : [clip];
-  group.sort((a, b) => (a === clip ? -1 : b === clip ? 1 : 0));
-  const mediaIds = [...new Set(group.map((c) => c.mediaId))];
+  return copyClips(project, [clipId], { withLinked });
+}
+
+/**
+ * Snapshot several clips for pasting, keeping their spacing relative to each
+ * other. `duration` spans from the earliest start to the latest end. Links are
+ * kept only between clips that are both in the snapshot. The first id comes first.
+ */
+export function copyClips(project, clipIds, { withLinked } = {}) {
+  const picked = clipIds.map((id) => findClip(project, id)).filter(Boolean);
+  if (!picked.length) return null;
+  const clips = new Set();
+  for (const clip of picked) {
+    clips.add(clip);
+    if (withLinked ?? trackOfClip(project, clip.id).type === 'video') for (const c of linkGroup(project, clip)) clips.add(c);
+  }
+  const all = [...clips];
+  const origin = Math.min(...all.map((c) => c.start));
+  const end = Math.max(...all.map((c) => clipEnd(c)));
+  const linkCount = (linkId) => all.filter((c) => c.linkId === linkId).length;
+  const mediaIds = [...new Set(all.map((c) => c.mediaId))];
   return {
     kind: 'clips',
-    duration: clipDuration(clip),
+    duration: round6(end - origin),
     media: mediaIds.map((id) => structuredClone(findMedia(project, id))),
-    clips: group.map((c) => {
+    clips: all.map((c) => {
       const track = trackOfClip(project, c.id);
       const { id, start, linkId, ...data } = structuredClone(c);
-      return { trackType: track.type, trackId: track.id, offset: round6(start - clip.start), linked: group.length > 1 && Boolean(linkId), data };
+      return { trackType: track.type, trackId: track.id, offset: round6(start - origin), linkKey: linkId && linkCount(linkId) > 1 ? linkId : null, data };
     }),
   };
+}
+
+/** Delete several clips. Later clips go first, so ripple shifts don't affect the earlier ones. */
+export function deleteClips(project, clipIds, options = {}) {
+  const clips = clipIds.map((id) => findClip(project, id)).filter(Boolean).sort((a, b) => b.start - a.start);
+  for (const c of clips) deleteClip(project, c.id, options);
 }
 
 /** Snapshot a text item for pasting. */
@@ -555,7 +576,12 @@ export function copyText(project, itemId) {
  * Paste a clipboard snapshot at time `at`. With `insert`, everything from `at`
  * on moves right first to make room. Returns the pasted copy of the copied clip.
  */
-export function pasteClips(project, clipboard, at, { insert = false } = {}) {
+export function pasteClips(project, clipboard, at, options) {
+  return pasteClipGroup(project, clipboard, at, options)[0];
+}
+
+/** Like pasteClips, but returns every clip created (the copied clip first). */
+export function pasteClipGroup(project, clipboard, at, { insert = false } = {}) {
   // Reuse media already in the project (same id or same file); add what's missing.
   const mediaMap = new Map();
   for (const m of clipboard.media) {
@@ -571,10 +597,14 @@ export function pasteClips(project, clipboard, at, { insert = false } = {}) {
   at = Math.max(0, snapToFrame(at, project.settings.fps));
   if (insert) insertSpace(project, at, clipboard.duration);
 
-  const linkId = clipboard.clips.some((c) => c.linked) ? newId('l') : undefined;
+  // Each copied pair gets its own new link.
+  const newLinks = new Map();
   const created = clipboard.clips.map((c) => {
     const clip = { ...structuredClone(c.data), id: newId('c'), mediaId: mediaMap.get(c.data.mediaId), start: round6(at + c.offset) };
-    if (c.linked) clip.linkId = linkId;
+    if (c.linkKey) {
+      if (!newLinks.has(c.linkKey)) newLinks.set(c.linkKey, newId('l'));
+      clip.linkId = newLinks.get(c.linkKey);
+    }
     let track;
     if (c.trackType === 'video') track = videoTrack(project);
     else {
@@ -586,7 +616,7 @@ export function pasteClips(project, clipboard, at, { insert = false } = {}) {
     return clip;
   });
   resolveOverlaps(project, created.map((c) => c.id));
-  return created[0];
+  return created;
 }
 
 /** Paste a copied text item starting at `at`. */

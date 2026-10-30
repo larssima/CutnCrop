@@ -409,6 +409,57 @@ test('copy + paste at the end, after a clip (insert) and into another project', 
   assert.deepEqual(validateProject(other), []);
 });
 
+test('several clips: copy keeps spacing and separate links, paste inserts, delete removes all', () => {
+  const p = projectWithAudio();
+  const a = tl.addClip(p, 'm1', 0); // 0..10
+  const b = tl.addClip(p, 'm1', 10); // 10..20
+  const c = tl.addClip(p, 'm1', 20); // 20..30
+  tl.trimClip(p, c.id, 'out', 24); // c: 20..24
+  const snap = tl.copyClips(p, [c.id, a.id]); // the copied clip first, a skipped clip between
+  assert.equal(snap.clips.length, 4, 'each video brings its sound');
+  assert.equal(snap.duration, 24, 'from the earliest start to the latest end');
+
+  const made = tl.pasteClipGroup(p, snap, 24);
+  assert.equal(made.length, 4);
+  assert.equal(made[0].start, 44, 'c keeps its position relative to a');
+  const pastedVideos = made.filter((x) => tl.trackOfClip(p, x.id).type === 'video');
+  assert.deepEqual(pastedVideos.map((x) => x.start).sort((x, y) => x - y), [24, 44]);
+  assert.equal(new Set(pastedVideos.map((x) => x.linkId)).size, 2, 'each pair gets its own link');
+  for (const v of pastedVideos) {
+    const [sound] = tl.linkedPartners(p, v);
+    assert.equal(sound.start, v.start);
+    assert.equal(sound.mediaId, v.mediaId);
+  }
+  assert.deepEqual(validateProject(p), []);
+
+  // Inserting makes room for the whole span.
+  const inserted = tl.pasteClipGroup(p, snap, 10, { insert: true });
+  assert.equal(b.start, 34, 'later clips moved by the full 24 s span');
+  assert.equal(inserted[0].start, 30);
+  assert.deepEqual(validateProject(p), []);
+
+  // A sound clip copied without its video is not linked to anything when pasted.
+  const [aSound] = tl.linkedPartners(p, a);
+  const soundOnly = tl.copyClips(p, [aSound.id, b.id], { withLinked: false });
+  assert.deepEqual(soundOnly.clips.map((x) => x.linkKey), [null, null]);
+
+  const before = tl.videoTrack(p).clips.length;
+  tl.deleteClips(p, [a.id, b.id]);
+  assert.equal(tl.videoTrack(p).clips.length, before - 2);
+  assert.equal(tl.findClip(p, aSound.id), undefined, 'deleting a video takes its sound');
+  assert.deepEqual(validateProject(p), []);
+
+  // Ripple delete of two clips closes both holes without disturbing the earlier one.
+  const q = projectWithAudio();
+  const x1 = tl.addClip(q, 'm1');
+  const x2 = tl.addClip(q, 'm1');
+  const x3 = tl.addClip(q, 'm1');
+  const x4 = tl.addClip(q, 'm1');
+  tl.deleteClips(q, [x1.id, x3.id], { ripple: true });
+  assert.deepEqual([x2.start, x4.start], [0, 10]);
+  assert.deepEqual(validateProject(q), []);
+});
+
 test('copying only the sound, text copy/paste, cut points', () => {
   const p = projectWithAudio();
   const v = tl.addClip(p, 'm1', 0);
