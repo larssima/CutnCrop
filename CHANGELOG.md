@@ -3,7 +3,7 @@
 All notable changes to CutnCrop. Versions follow [semantic versioning](https://semver.org):
 MAJOR for incompatible project-file or behavior changes, MINOR for new features, PATCH for fixes.
 
-## Unreleased
+## 0.5.0 — 2026-10-30
 
 - Select several clips with **Ctrl+click** (click again to take one out). Copy, cut, paste and
   delete work on all of them; a paste keeps their spacing relative to each other.
